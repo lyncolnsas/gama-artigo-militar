@@ -1,0 +1,174 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. Usuários e Autenticação (RBAC)
+model User {
+  id        String     @id @default(uuid())
+  name      String
+  email     String     @unique
+  password  String
+  role      String     @default("CUSTOMER") // ADMIN, MANAGER, CUSTOMER
+  orders    Order[]
+  reviews   Review[]
+  wishlists Wishlist[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// 2. Categorias e Marcas
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  image       String?
+  description String?
+  products    Product[]
+  coupons     Coupon[]
+  createdAt   DateTime  @default(now())
+}
+
+model Brand {
+  id        String    @id @default(uuid())
+  name      String
+  logo      String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+// 3. Produtos e Mídias
+model Product {
+  id           String         @id @default(uuid())
+  title        String
+  slug         String         @unique
+  description  String
+  price        Float
+  promoPrice   Float?
+  stock        Int            @default(0)
+  isBestseller Boolean        @default(false)
+  isMadeToOrder Boolean       @default(false)
+  productionDays Int?         @default(0)
+  categoryId   String?
+  category     Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId      String?
+  brand        Brand?         @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  media        ProductMedia[]
+  variants     ProductVariant[]
+  orderItems   OrderItem[]
+  reviews      Review[]
+  wishlists    Wishlist[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  color     String
+  size      String
+  stock     Int      @default(0)
+  sku       String?
+  price     Float?
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, color, size])
+}
+
+model ProductMedia {
+  id        String   @id @default(uuid())
+  type      String   @default("IMAGE") // IMAGE, VIDEO_FILE, YOUTUBE, INSTAGRAM
+  url       String
+  isPrimary Boolean  @default(false)
+  color     String?
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// 4. Seções Editáveis do CMS
+model SiteSection {
+  id          String   @id @default(uuid())
+  sectionKey  String   @unique
+  title       String?
+  subtitle    String?
+  mediaType   String   @default("IMAGE")
+  mediaUrl    String
+  buttonText  String?
+  buttonLink  String?
+  isActive    Boolean  @default(true)
+  contentData String?
+  updatedAt   DateTime @updatedAt
+}
+
+// 5. Cupons de Desconto com Validação por Categoria
+model Coupon {
+  id           String    @id @default(uuid())
+  code         String    @unique
+  discountType String    @default("PERCENTAGE") // PERCENTAGE, FIXED
+  value        Float
+  minSpend     Float?
+  categoryId   String?
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  isActive     Boolean   @default(true)
+  usageLimit   Int?      @default(100)
+  usageCount   Int       @default(0)
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+// 6. Pedidos e Checkout
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique
+  userId          String?
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName    String
+  customerEmail   String
+  customerPhone   String
+  totalAmount     Float
+  discountAmount  Float       @default(0)
+  finalAmount     Float
+  status          String      @default("PENDING") // PENDING, PAID, SHIPPED, DELIVERED, CANCELLED
+  paymentMethod   String      @default("PIX")
+  shippingAddress String
+  items           OrderItem[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity  Int
+  price     Float
+}
+
+// 7. Avaliações e Lista de Desejos
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int      @default(5)
+  comment   String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
