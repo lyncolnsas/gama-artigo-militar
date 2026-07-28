@@ -47,20 +47,23 @@ conn.on('ready', () => {
     cd /var/www/gama-artigo-militar
 
     echo "=== 3. CRIANDO ARQUIVO DE CONFIGURAÇÃO DE AMBIENTE (.env) ==="
-    cat << 'EOF' > .env
-DATABASE_URL="file:./dev.db"
+    DB_ABSOLUTE_PATH="/var/www/gama-artigo-militar/prisma/dev.db"
+    cat << EOF > .env
+DATABASE_URL="file:${DB_ABSOLUTE_PATH}"
 PORT=3001
 JWT_SECRET="gama_store_enterprise_super_secret_key_2026"
 STORE_FRONTEND_URL="http://gamaartigomilitar.com"
 EOF
+    echo "DATABASE_URL configurado para: file:${DB_ABSOLUTE_PATH}"
 
     echo "=== 4. INSTALANDO DEPENDÊNCIAS DO BACKEND ==="
     npm install --production=false
 
     echo "=== 5. BANCO DE DADOS PRISMA & SEED ==="
+    export DATABASE_URL="file:${DB_ABSOLUTE_PATH}"
     npx prisma db push --accept-data-loss
     npx prisma generate
-    node prisma/seed.js || true
+    DATABASE_URL="file:${DB_ABSOLUTE_PATH}" node prisma/seed.js || true
 
     echo "=== 6. COMPILANDO FRONTEND VITE ==="
     cd frontend
