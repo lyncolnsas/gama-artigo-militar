@@ -6,25 +6,36 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Semeando banco de dados completo do Gama Store com TODOS os produtos demo...');
 
-  // 1. Criar/Atualizar Usuário Administrador Principal com ID FIXO
-  // Usar upsert com ID fixo garante que o JWT continua válido entre deploys
+  // 1. Criar/Atualizar Usuário Administrador Principal
+  // findFirst + update preserva o ID existente (JWT continua válido entre deploys)
   const adminPassword = await bcrypt.hash('22101844bc', 10);
 
-  await prisma.user.upsert({
-    where: { email: 'admin@gamaartigomilitar.com' },
-    update: {
-      name: 'Administrador Geral',
-      password: adminPassword,
-      role: 'ADMIN'
-    },
-    create: {
-      id: 'admin-gama-principal-001',
-      name: 'Administrador Geral',
-      email: 'admin@gamaartigomilitar.com',
-      password: adminPassword,
-      role: 'ADMIN'
-    }
+  const existingAdmin = await prisma.user.findFirst({
+    where: { email: 'admin@gamaartigomilitar.com' }
   });
+
+  if (existingAdmin) {
+    // Atualiza apenas senha/nome - preserva o ID e mantém tokens válidos
+    await prisma.user.update({
+      where: { id: existingAdmin.id },
+      data: {
+        name: 'Administrador Geral',
+        password: adminPassword,
+        role: 'ADMIN'
+      }
+    });
+  } else {
+    // Primeira vez - cria o admin
+    await prisma.user.create({
+      data: {
+        name: 'Administrador Geral',
+        email: 'admin@gamaartigomilitar.com',
+        password: adminPassword,
+        role: 'ADMIN'
+      }
+    });
+  }
+
   await prisma.botConfig.upsert({
     where: { id: 'default' },
     update: {},
