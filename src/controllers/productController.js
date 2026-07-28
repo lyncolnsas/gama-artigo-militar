@@ -141,19 +141,6 @@ export const updateProduct = async (req, res) => {
       updatedStock = variants.reduce((acc, v) => acc + (parseInt(v.stock, 10) || 0), 0);
     }
 
-    const updatedProduct = await prisma.product.update({
-      where: { id },
-      data: {
-        title,
-        slug,
-        description,
-        price: price ? parseFloat(price) : undefined,
-        promoPrice: promoPrice !== undefined ? (promoPrice ? parseFloat(promoPrice) : null) : undefined,
-        stock: updatedStock,
-        isBestseller: isBestseller !== undefined ? Boolean(isBestseller) : undefined,
-        isMadeToOrder: isMadeToOrder !== undefined ? Boolean(isMadeToOrder) : undefined,
-        productionDays: productionDays !== undefined ? parseInt(productionDays, 10) || 0 : undefined,
-        categoryId: categoryId !== undefined ? (categoryId || null) : undefined,
     const validMedia = (media || []).filter(m => m && m.url && String(m.url).trim() !== '');
     const validVariants = (variants || []).filter(v => v && (v.color || v.size));
 
