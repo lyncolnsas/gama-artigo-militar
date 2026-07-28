@@ -47,14 +47,6 @@ async function main() {
     }
   });
 
-  await prisma.user.create({
-    data: {
-      name: 'Administrador Geral',
-      email: 'admin@gamaartigomilitar.com',
-      password: adminPassword,
-      role: 'ADMIN'
-    }
-  });
 
   // 2. Criar Categorias
   const catColetes = await prisma.category.upsert({
