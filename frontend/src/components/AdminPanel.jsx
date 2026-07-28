@@ -284,33 +284,65 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     }));
   }, [sectionForm]);
 
+  const forceLogout = () => {
+    localStorage.removeItem('gama_store_token');
+    localStorage.removeItem('gama_store_user');
+    setCurrentUser(null);
+    setAuthHeader({});
+  };
+
   const checkAdminSession = async () => {
     const token = localStorage.getItem('gama_store_token');
     const userStr = localStorage.getItem('gama_store_user');
 
-    if (token && userStr) {
+    if (!token || !userStr) {
+      setCurrentUser(null);
+      return;
+    }
+
+    // Valida o token no servidor (detecta tokens expirados/inválidos pós re-seed)
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        // Token inválido ou expirado — limpa sessão e força re-login
+        forceLogout();
+        return;
+      }
+
+      const serverUser = await res.json();
+      if (serverUser.role !== 'ADMIN' && serverUser.role !== 'MANAGER') {
+        forceLogout();
+        return;
+      }
+
+      // Token válido — atualiza dados do usuário no localStorage com dados frescos do servidor
+      localStorage.setItem('gama_store_user', JSON.stringify(serverUser));
+      setAuthHeader({ 'Authorization': `Bearer ${token}` });
+      setCurrentUser(serverUser);
+
+      // Carrega todos os dados do painel
+      fetchAnalytics();
+      fetchDetailedAnalytics();
+      fetchProductDraft();
+      fetchOrders();
+      fetchCoupons();
+      fetchUsers();
+      fetchBackups();
+      fetchMediaLibrary();
+      fetchBotConfig();
+    } catch (e) {
+      // Erro de rede — mantém sessão local para não deslogar offline
       try {
         const u = JSON.parse(userStr);
         if (u.role === 'ADMIN' || u.role === 'MANAGER') {
-          // Sincroniza estado React, mas os fetchers leem o token do localStorage diretamente
           setAuthHeader({ 'Authorization': `Bearer ${token}` });
           setCurrentUser(u);
-          // Usando getAuthHeaders() inline pois o estado authHeader pode ainda não ter propagado
-          const h = { 'Authorization': `Bearer ${token}` };
-          fetchAnalytics();
-          fetchDetailedAnalytics();
-          fetchProductDraft();
-          fetchOrders();
-          fetchCoupons();
-          fetchUsers();
-          fetchBackups();
-          fetchMediaLibrary();
-          fetchBotConfig();
-          return;
         }
-      } catch (e) {}
+      } catch (_) {}
     }
-    setCurrentUser(null);
   };
 
   const handleAdminLogin = async (e) => {
