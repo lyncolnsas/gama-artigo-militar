@@ -31,6 +31,14 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
   
   const [submitting, setSubmitting] = useState(false);
   const [createdOrderData, setCreatedOrderData] = useState(null);
+  const [botPublicConfig, setBotPublicConfig] = useState({ isBotEnabled: true, whatsappNumber: '5511999998888' });
+
+  useEffect(() => {
+    fetch('/api/bot/public-config')
+      .then(res => res.json())
+      .then(data => setBotPublicConfig(data))
+      .catch(() => {});
+  }, []);
 
   const addressWrapperRef = useRef(null);
 
@@ -480,6 +488,26 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
               <p className="text-gray-400">Cliente: <strong className="text-white">{createdOrderData.order?.customerName}</strong></p>
               <p className="text-gray-400">Valor Estimado: <strong className="text-emerald-400 font-bold">R$ {parseFloat(createdOrderData.order?.finalAmount).toFixed(2)}</strong></p>
             </div>
+
+            {createdOrderData.isBotEnabled ? (
+              <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 rounded text-xs text-emerald-200 text-left w-full space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  🤖 Bot WhatsApp Ativo
+                </p>
+                <p className="text-[11px] text-emerald-300">
+                  Uma mensagem de confirmação de pedido foi enviada para o seu WhatsApp! Você pode acompanhar o status da entrega interagindo com nosso bot.
+                </p>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-950/80 border border-amber-500/50 rounded text-xs text-amber-200 text-left w-full space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  🔗 Direcionamento Direto WhatsApp
+                </p>
+                <p className="text-[11px] text-amber-300">
+                  Clique no botão abaixo para enviar o resumo completo da sua solicitação diretamente para o atendimento da nossa loja.
+                </p>
+              </div>
+            )}
 
             {createdOrderData.whatsappLink && (
               <a

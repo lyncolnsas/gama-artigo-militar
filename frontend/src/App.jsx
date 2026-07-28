@@ -45,6 +45,18 @@ export default function App() {
         setCurrentUser(JSON.parse(savedUser));
       } catch (e) {}
     }
+
+    // Escutar eventos de alteração de storage entre abas
+    const handleStorageChange = (e) => {
+      if (e.key === 'gama_store_cart') {
+        try {
+          setCartItems(e.newValue ? JSON.parse(e.newValue) : []);
+        } catch (err) {}
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const handleAddToCart = (product) => {

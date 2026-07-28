@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import MediaViewer from './MediaViewer';
 import MediaPickerModal from './MediaPickerModal';
@@ -9,7 +10,30 @@ import {
 } from 'lucide-react';
 
 export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToStore }) {
-  const [activeTab, setActiveTab] = useState('analytics');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const search = window.location.search;
+      const params = new URLSearchParams(search);
+      const tabParam = params.get('tab');
+      if (tabParam) return tabParam;
+
+      const savedTab = localStorage.getItem('gama_store_admin_tab');
+      return savedTab || 'analytics';
+    } catch (e) {
+      return 'analytics';
+    }
+  });
+
+  const changeTab = (newTab) => {
+    setActiveTab(newTab);
+    try {
+      localStorage.setItem('gama_store_admin_tab', newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', newTab);
+      window.history.replaceState({}, '', url.toString());
+    } catch (e) {}
+  };
+
   const [authHeader, setAuthHeader] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,6 +54,18 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     totalUsersCount: 0,
     recentOrders: []
   });
+
+  const [detailedAnalytics, setDetailedAnalytics] = useState({
+    mostViewed: [],
+    mostSold: [],
+    mostSearched: [],
+    lowStockProducts: []
+  });
+
+  // 1.1 Rascunhos & Modal de Produtos State
+  const [savedDraft, setSavedDraft] = useState(null);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
 
   // 2. CMS State & Seções Completas
   const [sections, setSections] = useState([]);
@@ -111,6 +147,16 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
   // 9. Usuários State
   const [users, setUsers] = useState([]);
 
+  // 10. WhatsApp Bot State
+  const [botConfig, setBotConfig] = useState({
+    isBotEnabled: true,
+    whatsappNumber: '5511999998888',
+    welcomeMessage: '',
+    connectionStatus: 'DISCONNECTED',
+    qrCodeData: null
+  });
+  const [botLoading, setBotLoading] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -141,11 +187,14 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
           setAuthHeader(headers);
           setCurrentUser(u);
           fetchAnalytics(headers);
+          fetchDetailedAnalytics(headers);
+          fetchProductDraft(headers);
           fetchOrders(headers);
           fetchCoupons(headers);
           fetchUsers(headers);
           fetchBackups(headers);
           fetchMediaLibrary(headers);
+          fetchBotConfig(headers);
           return;
         }
       } catch (e) {}
@@ -174,11 +223,14 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         setCurrentUser(data.user);
 
         fetchAnalytics(headers);
+        fetchDetailedAnalytics(headers);
+        fetchProductDraft(headers);
         fetchOrders(headers);
         fetchCoupons(headers);
         fetchUsers(headers);
         fetchBackups(headers);
         fetchMediaLibrary(headers);
+        fetchBotConfig(headers);
         showNotification(`Bem-vindo, Comandante ${data.user.name}!`);
       } else {
         setLoginError(data.error || 'Credenciais inválidas ou permissão insuficiente.');
@@ -207,6 +259,58 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/analytics', { headers });
       if (res.ok) setAnalytics(await res.json());
+    } catch (e) {}
+  };
+
+  const fetchDetailedAnalytics = async (headers = authHeader) => {
+    try {
+      const res = await fetch('/api/admin/analytics/details', { headers });
+      if (res.ok) setDetailedAnalytics(await res.json());
+    } catch (e) {}
+  };
+
+  const fetchProductDraft = async (headers = authHeader) => {
+    try {
+      const res = await fetch('/api/admin/products/draft', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.draft) setSavedDraft(data);
+        else setSavedDraft(null);
+      }
+    } catch (e) {}
+  };
+
+  // Auto-Save de Rascunhos em background
+  useEffect(() => {
+    if (!isProductModalOpen) return;
+    if (!productForm.title && !productForm.description && (!productForm.variants || productForm.variants.length === 0)) return;
+
+    const timer = setTimeout(() => {
+      fetch('/api/admin/products/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify({ draftData: productForm })
+      }).then(res => {
+        if (res.ok) setSavedDraft({ draft: productForm, updatedAt: new Date().toISOString() });
+      }).catch(() => {});
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [productForm, isProductModalOpen, authHeader]);
+
+  const handleRestoreDraft = () => {
+    if (savedDraft && savedDraft.draft) {
+      setProductForm(savedDraft.draft);
+      setIsProductModalOpen(true);
+      showNotification('Rascunho do produto restaurado!');
+    }
+  };
+
+  const handleDiscardDraft = async () => {
+    try {
+      await fetch('/api/admin/products/draft', { method: 'DELETE', headers: authHeader });
+      setSavedDraft(null);
+      showNotification('Rascunho descartado.');
     } catch (e) {}
   };
 
@@ -270,6 +374,65 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
       const res = await fetch('/api/admin/backup', { headers });
       if (res.ok) setBackups(await res.json());
     } catch (e) {}
+  };
+
+  const fetchBotConfig = async (headers = authHeader) => {
+    try {
+      const res = await fetch('/api/admin/bot/config', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setBotConfig(data);
+      }
+    } catch (e) {}
+  };
+
+  const handleSaveBotConfig = async (e) => {
+    e.preventDefault();
+    setBotLoading(true);
+    try {
+      const res = await fetch('/api/admin/bot/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify({
+          isBotEnabled: botConfig.isBotEnabled,
+          whatsappNumber: botConfig.whatsappNumber,
+          welcomeMessage: botConfig.welcomeMessage
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBotConfig(data);
+        showNotification('Configurações do WhatsApp Bot salvas!');
+      } else {
+        showNotification('Erro ao salvar configurações do Bot.', 'error');
+      }
+    } catch (err) {
+      showNotification('Erro de comunicação.', 'error');
+    } finally {
+      setBotLoading(false);
+    }
+  };
+
+  const handleRestartBot = async () => {
+    setBotLoading(true);
+    try {
+      const res = await fetch('/api/admin/bot/restart', {
+        method: 'POST',
+        headers: authHeader
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBotConfig(data);
+        showNotification('Comando de reconexão enviado ao WhatsApp Bot!');
+      } else {
+        const err = await res.json();
+        showNotification(err.error || 'Erro ao reconectar bot.', 'error');
+      }
+    } catch (e) {
+      showNotification('Erro ao reconectar.', 'error');
+    } finally {
+      setBotLoading(false);
+    }
   };
 
   // --- ACTIONS ---
@@ -931,7 +1094,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => changeTab(tab.id)}
             className={`px-3 py-2 rounded text-xs font-bold font-tactical tracking-wider transition-all ${
               activeTab === tab.id
                 ? 'bg-tactical-gold text-black shadow-md'
@@ -953,53 +1116,241 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         </div>
       )}
 
-      {/* === MÓDULO 1: 📊 ANALYTICS === */}
+      {/* === MÓDULO 1: 📊 ANALYTICS COMPLETO === */}
       {activeTab === 'analytics' && (
-        <div className="space-y-6">
+        <div className="space-y-8">
+          {/* KPI Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-[#171a21] p-5 rounded border border-gray-800 space-y-1">
-              <div className="flex justify-between items-center text-gray-400 text-xs">
+            <div className="bg-[#171a21] p-5 rounded-xl border border-gray-800 space-y-1 shadow-sm">
+              <div className="flex justify-between items-center text-gray-400 text-xs font-bold uppercase tracking-wider">
                 <span>RECEITA TOTAL</span>
                 <DollarSign className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="text-3xl font-tactical font-extrabold text-white">
                 R$ {analytics.totalRevenue.toFixed(2)}
               </div>
-              <div className="text-[10px] text-emerald-400">{analytics.totalSalesCount} vendas pagas</div>
+              <div className="text-xs text-emerald-400 font-semibold">{analytics.totalSalesCount} vendas pagas</div>
             </div>
 
-            <div className="bg-[#171a21] p-5 rounded border border-gray-800 space-y-1">
-              <div className="flex justify-between items-center text-gray-400 text-xs">
+            <div className="bg-[#171a21] p-5 rounded-xl border border-gray-800 space-y-1 shadow-sm">
+              <div className="flex justify-between items-center text-gray-400 text-xs font-bold uppercase tracking-wider">
                 <span>SOLICITAÇÕES DE PEDIDOS</span>
                 <ShoppingBag className="w-4 h-4 text-tactical-gold" />
               </div>
               <div className="text-3xl font-tactical font-extrabold text-white">
                 {analytics.totalOrders}
               </div>
-              <div className="text-[10px] text-amber-400">{analytics.pendingOrdersCount} pendentes</div>
+              <div className="text-xs text-amber-400 font-semibold">{analytics.pendingOrdersCount} pendentes</div>
             </div>
 
-            <div className="bg-[#171a21] p-5 rounded border border-gray-800 space-y-1">
-              <div className="flex justify-between items-center text-gray-400 text-xs">
+            <div className="bg-[#171a21] p-5 rounded-xl border border-gray-800 space-y-1 shadow-sm">
+              <div className="flex justify-between items-center text-gray-400 text-xs font-bold uppercase tracking-wider">
                 <span>PRODUTOS CADASTRADOS</span>
                 <Layers className="w-4 h-4 text-sky-400" />
               </div>
               <div className="text-3xl font-tactical font-extrabold text-white">
                 {analytics.totalProductsCount}
               </div>
-              <div className="text-[10px] text-gray-400">Ativos no catálogo</div>
+              <div className="text-xs text-gray-400">Ativos no catálogo</div>
             </div>
 
-            <div className="bg-[#171a21] p-5 rounded border border-gray-800 space-y-1">
-              <div className="flex justify-between items-center text-gray-400 text-xs">
+            <div className="bg-[#171a21] p-5 rounded-xl border border-gray-800 space-y-1 shadow-sm">
+              <div className="flex justify-between items-center text-gray-400 text-xs font-bold uppercase tracking-wider">
                 <span>USUÁRIOS REGISTRADOS</span>
                 <Users className="w-4 h-4 text-purple-400" />
               </div>
               <div className="text-3xl font-tactical font-extrabold text-white">
                 {analytics.totalUsersCount}
               </div>
-              <div className="text-[10px] text-gray-400">Clientes & Admins</div>
+              <div className="text-xs text-gray-400">Clientes & Admins</div>
             </div>
+          </div>
+
+          {/* PAINÉIS DE ANÁLISE DETALHADA */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            {/* 1. PRODUTOS MAIS VISTOS */}
+            <div className="bg-[#171a21] rounded-xl border border-gray-800 overflow-hidden shadow-sm flex flex-col">
+              <div className="px-5 py-4 bg-[#13161d] border-b border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-sky-400" />
+                  <h3 className="font-tactical text-lg font-bold text-white uppercase tracking-wider">1. Produtos Mais Vistos</h3>
+                </div>
+                <span className="text-xs font-bold text-sky-400 bg-sky-950/60 border border-sky-800/40 px-2.5 py-1 rounded-full">Top 10 Vitrine</span>
+              </div>
+              <div className="p-4 space-y-3 flex-1 overflow-y-auto max-h-[380px] scrollbar-thin">
+                {(!detailedAnalytics.mostViewed || detailedAnalytics.mostViewed.length === 0) ? (
+                  <div className="py-8 text-center text-gray-500 text-xs">Nenhum dado de visualização registrado ainda.</div>
+                ) : (
+                  detailedAnalytics.mostViewed.map((p, idx) => {
+                    const mediaUrl = p.media?.[0]?.url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200';
+                    return (
+                      <div key={p.id || idx} className="flex items-center justify-between p-3 bg-[#0f1115] border border-gray-800 rounded-lg">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-6 h-6 rounded-full bg-gray-800 text-gray-300 font-extrabold text-xs flex items-center justify-center flex-shrink-0">#{idx + 1}</span>
+                          <div className="w-10 h-10 rounded bg-black overflow-hidden border border-gray-700 flex-shrink-0">
+                            <MediaViewer mediaUrl={mediaUrl} mediaType={p.media?.[0]?.type || 'IMAGE'} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate">{p.title}</h4>
+                            <span className="text-[10px] text-gray-400 font-mono">R$ {parseFloat(p.price).toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-sky-400 bg-sky-950/80 border border-sky-800/60 px-3 py-1 rounded-lg">
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>{p.viewsCount || 0} visualizações</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 2. PRODUTOS MAIS VENDIDOS */}
+            <div className="bg-[#171a21] rounded-xl border border-gray-800 overflow-hidden shadow-sm flex flex-col">
+              <div className="px-5 py-4 bg-[#13161d] border-b border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-emerald-400" />
+                  <h3 className="font-tactical text-lg font-bold text-white uppercase tracking-wider">2. Produtos Mais Vendidos</h3>
+                </div>
+                <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full">Ranking Comercial</span>
+              </div>
+              <div className="p-4 space-y-3 flex-1 overflow-y-auto max-h-[380px] scrollbar-thin">
+                {(!detailedAnalytics.mostSold || detailedAnalytics.mostSold.length === 0) ? (
+                  <div className="py-8 text-center text-gray-500 text-xs">Nenhum pedido finalizado para listar mais vendidos.</div>
+                ) : (
+                  detailedAnalytics.mostSold.map((item, idx) => {
+                    const p = item.product;
+                    const mediaUrl = p?.media?.[0]?.url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200';
+                    return (
+                      <div key={p?.id || idx} className="flex items-center justify-between p-3 bg-[#0f1115] border border-gray-800 rounded-lg">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-6 h-6 rounded-full bg-emerald-950 text-emerald-400 font-extrabold text-xs flex items-center justify-center flex-shrink-0">#{idx + 1}</span>
+                          <div className="w-10 h-10 rounded bg-black overflow-hidden border border-gray-700 flex-shrink-0">
+                            <MediaViewer mediaUrl={mediaUrl} mediaType={p?.media?.[0]?.type || 'IMAGE'} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate">{p?.title || 'Produto'}</h4>
+                            <span className="text-[10px] text-gray-400 font-mono">R$ {parseFloat(p?.price || 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-3 py-1 rounded-lg">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>{item.totalQuantitySold} un. vendidas</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 3. TERMOS MAIS PESQUISADOS (INCLUINDO ITENS NÃO EXISTENTES NO CATÁLOGO!) */}
+            <div className="bg-[#171a21] rounded-xl border border-gray-800 overflow-hidden shadow-sm flex flex-col">
+              <div className="px-5 py-4 bg-[#13161d] border-b border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Search className="w-5 h-5 text-tactical-gold" />
+                  <h3 className="font-tactical text-lg font-bold text-white uppercase tracking-wider">3. Termos & Buscas dos Clientes</h3>
+                </div>
+                <span className="text-xs font-bold text-tactical-gold bg-tactical-gold/10 border border-tactical-gold/30 px-2.5 py-1 rounded-full">Demanda do Mercado</span>
+              </div>
+              <div className="p-4 space-y-2.5 flex-1 overflow-y-auto max-h-[380px] scrollbar-thin">
+                {(!detailedAnalytics.mostSearched || detailedAnalytics.mostSearched.length === 0) ? (
+                  <div className="py-8 text-center text-gray-500 text-xs">Nenhuma pesquisa registrada no catálogo ou bot ainda.</div>
+                ) : (
+                  detailedAnalytics.mostSearched.map((s, idx) => {
+                    const hasNoResults = s.lastResultsCount === 0;
+                    return (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-[#0f1115] border border-gray-800 rounded-lg">
+                        <div className="flex items-center gap-2.5">
+                          <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <div>
+                            <span className="text-xs font-bold text-white uppercase tracking-wide font-mono font-bold">"{s.query}"</span>
+                            <span className="text-[10px] text-gray-400 block">{s.count} busca{s.count > 1 ? 's' : ''} realizada{s.count > 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+
+                        {hasNoResults ? (
+                          <span className="text-[11px] font-bold text-red-400 bg-red-950/80 border border-red-800/60 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                            ⚠️ 0 Resultados (Não Existe no Catálogo)
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-1 rounded-lg">
+                            🟢 Encontrado ({s.lastResultsCount} itens)
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 4. ALERTA DE ESTOQUE BAIXO E PRODUTOS EM FALTA */}
+            <div className="bg-[#171a21] rounded-xl border border-gray-800 overflow-hidden shadow-sm flex flex-col">
+              <div className="px-5 py-4 bg-[#13161d] border-b border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-amber-400" />
+                  <h3 className="font-tactical text-lg font-bold text-white uppercase tracking-wider">4. Alerta de Estoque Baixo / Em Falta</h3>
+                </div>
+                <span className="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-800/40 px-2.5 py-1 rounded-full">Gerenciamento de Estoque</span>
+              </div>
+              <div className="p-4 space-y-3 flex-1 overflow-y-auto max-h-[380px] scrollbar-thin">
+                {(!detailedAnalytics.lowStockProducts || detailedAnalytics.lowStockProducts.length === 0) ? (
+                  <div className="py-8 text-center text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5">
+                    <CheckCircle className="w-4 h-4" /> Todos os produtos estão com estoque alto e saudável!
+                  </div>
+                ) : (
+                  detailedAnalytics.lowStockProducts.map((p, idx) => {
+                    const mediaUrl = p.media?.[0]?.url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200';
+                    return (
+                      <div key={p.id || idx} className="flex items-center justify-between p-3 bg-[#0f1115] border border-amber-900/40 rounded-lg">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded bg-black overflow-hidden border border-gray-700 flex-shrink-0">
+                            <MediaViewer mediaUrl={mediaUrl} mediaType={p.media?.[0]?.type || 'IMAGE'} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate">{p.title}</h4>
+                            <span className="text-[10px] text-amber-400 font-bold block">
+                              Estoque Total: {p.stock} un. {p.stock === 0 ? '(Simbólico / Repor)' : '(Baixo)'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setProductForm({
+                              id: p.id,
+                              title: p.title || '',
+                              slug: p.slug || '',
+                              description: p.description || '',
+                              price: p.price ? String(p.price) : '',
+                              promoPrice: p.promoPrice ? String(p.promoPrice) : '',
+                              stock: p.stock || 0,
+                              isBestseller: p.isBestseller || false,
+                              isMadeToOrder: p.isMadeToOrder || false,
+                              productionDays: p.productionDays || 0,
+                              categoryId: p.categoryId || '',
+                              mediaUrlInput: p.media?.[0]?.url || '',
+                              mediaTypeInput: p.media?.[0]?.type || 'IMAGE',
+                              mediaList: p.media || [],
+                              variants: p.variants || []
+                            });
+                            changeTab('products');
+                            setIsProductModalOpen(true);
+                          }}
+                          className="bg-tactical-gold hover:bg-tactical-goldHover text-black text-xs font-bold px-3 py-1.5 rounded-lg font-tactical uppercase tracking-wider shadow transition-all flex-shrink-0"
+                        >
+                          EDITAR / REPOR ESTOQUE
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
@@ -1273,413 +1624,507 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         </div>
       )}
 
-      {/* === MÓDULO 5: 📦 PRODUTOS COM SUPORTE TOTAL A MÍDIAS E IMAGENS === */}
+      {/* === MÓDULO 5: 📦 PRODUTOS (GRADE ORGANIZADA + MODAL DE CADASTRO COM RASCUNHO AUTOMÁTICO) === */}
       {activeTab === 'products' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="space-y-6">
 
-          {/* ═══════════════════════════════════════════ */}
-          {/* FORMULÁRIO DE CADASTRO / EDIÇÃO DE PRODUTO  */}
-          {/* ═══════════════════════════════════════════ */}
-          <div className="lg:col-span-7">
-
-            {/* Header do Formulário */}
-            <div className="flex items-center justify-between mb-4">
+          {/* BANNER DE RASCUNHO SERVIDOR PENDENTE */}
+          {savedDraft && savedDraft.draft && !isProductModalOpen && (
+            <div className="bg-amber-950/80 border border-amber-500/60 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-tactical-gold/10 border border-tactical-gold/30 flex items-center justify-center flex-shrink-0">
-                  {productForm.id
-                    ? <Edit className="w-4 h-4 text-tactical-gold" />
-                    : <Plus className="w-4 h-4 text-tactical-gold" />
-                  }
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-tactical text-xl font-bold text-white leading-tight">
-                    {productForm.id ? 'EDITAR PRODUTO' : 'CADASTRAR NOVO PRODUTO'}
-                  </h2>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">
-                    {productForm.id ? `ID: ${productForm.id}` : 'Preencha os campos abaixo para adicionar ao catálogo'}
+                  <h4 className="text-sm font-bold text-amber-300">📝 EXISTE UM RASCUNHO DE PRODUTO SALVO NO SERVIDOR</h4>
+                  <p className="text-xs text-amber-200/80">
+                    Você possui alterações não salvas (salvo em {savedDraft.updatedAt ? new Date(savedDraft.updatedAt).toLocaleTimeString() : 'tempo real'}). Deseja continuar de onde parou?
                   </p>
                 </div>
               </div>
-              {productForm.id && (
+              <div className="flex items-center gap-2.5 w-full sm:w-auto flex-shrink-0">
                 <button
-                  onClick={resetProductForm}
-                  className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-tactical-gold border border-gray-700 hover:border-tactical-gold/50 px-3 py-1.5 rounded transition-all"
+                  onClick={handleRestoreDraft}
+                  className="flex-1 sm:flex-none bg-tactical-gold hover:bg-tactical-goldHover text-black text-xs font-bold px-4 py-2.5 rounded-lg font-tactical uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-1.5"
                 >
-                  <Plus className="w-3 h-3" /> Novo Produto
+                  <Sparkles className="w-4 h-4" /> CONTINUAR CADASTRANDO
                 </button>
-              )}
+                <button
+                  onClick={handleDiscardDraft}
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold px-3.5 py-2.5 rounded-lg transition-all border border-gray-700"
+                >
+                  Descartar Rascunho
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* BARRA SUPERIOR DE FERRAMENTAS & FILTROS DO CATÁLOGO */}
+          <div className="bg-[#171a21] p-5 rounded-xl border border-gray-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-1">
+              <div>
+                <h2 className="font-tactical text-2xl font-bold text-white tracking-wide flex items-center gap-2">
+                  <ShoppingBag className="w-6 h-6 text-tactical-gold" /> CATÁLOGO DE PRODUTOS
+                </h2>
+                <p className="text-xs text-gray-400">Total: {products.length} itens cadastrados no catálogo</p>
+              </div>
+
+              {/* Campo de Busca no Catálogo */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Pesquisar por título, SKU ou categoria..."
+                  className="w-full bg-[#0f1115] border border-gray-700 focus:border-tactical-gold text-white text-xs sm:text-sm pl-10 pr-4 py-2.5 rounded-lg focus:outline-none transition-colors"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {/* Filtro por Categoria */}
+              <select
+                className="bg-[#0f1115] border border-gray-700 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 rounded-lg focus:outline-none focus:border-tactical-gold"
+                value={selectedCategoryFilter}
+                onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              >
+                <option value="ALL">Todas as Categorias ({products.length})</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="space-y-3">
-
-              {/* ── SEÇÃO 1: IDENTIFICAÇÃO ── */}
-              <div className="rounded-lg border border-gray-800 bg-[#0f1115] overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 bg-[#13161d] border-b border-gray-800">
-                  <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-[11px] font-black flex items-center justify-center flex-shrink-0">1</div>
-                  <div className="flex items-center gap-2">
-                    <Tag className="w-3.5 h-3.5 text-tactical-gold" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-gray-200">Identificação do Produto</span>
-                  </div>
-                </div>
-                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">Título do Produto *</label>
-                    <input
-                      type="text"
-                      required
-                      className="w-full bg-[#171a21] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3 py-2.5 text-white text-xs focus:outline-none transition-colors placeholder-gray-600"
-                      value={productForm.title}
-                      onChange={(e) => setProductForm({...productForm, title: e.target.value})}
-                      placeholder="ex: Colete Plate Carrier Spec-Ops"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">Categoria *</label>
-                    <select
-                      className="w-full bg-[#171a21] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3 py-2.5 text-white text-xs font-bold focus:outline-none transition-colors"
-                      value={productForm.categoryId}
-                      onChange={(e) => setProductForm({...productForm, categoryId: e.target.value})}
-                    >
-                      <option value="">-- Selecione uma Categoria --</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── SEÇÃO 2: MÍDIA PRINCIPAL ── */}
-              <div className="rounded-lg border border-gray-800 bg-[#0f1115] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 bg-[#13161d] border-b border-gray-800">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-[11px] font-black flex items-center justify-center flex-shrink-0">2</div>
-                    <div className="flex items-center gap-2">
-                      <Camera className="w-3.5 h-3.5 text-tactical-gold" />
-                      <span className="text-[11px] font-bold uppercase tracking-widest text-gray-200">Foto / Mídia Principal</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveMediaColor(null); setIsMediaModalOpen(true); }}
-                    className="text-[10px] bg-tactical-gold/10 hover:bg-tactical-gold/20 text-tactical-gold px-3 py-1.5 rounded-lg border border-tactical-gold/30 font-bold flex items-center gap-1.5 transition-all"
-                  >
-                    <HardDriveUpload className="w-3 h-3" /> Biblioteca de Mídias
-                  </button>
-                </div>
-                <div className="p-4 space-y-3">
-                  <div className="flex gap-2">
-                    <select
-                      className="bg-[#171a21] border border-gray-700 text-white rounded-lg px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-tactical-gold flex-shrink-0"
-                      value={productForm.mediaTypeInput}
-                      onChange={(e) => setProductForm({...productForm, mediaTypeInput: e.target.value})}
-                    >
-                      <option value="IMAGE">Imagem</option>
-                      <option value="VIDEO_FILE">Vídeo MP4</option>
-                      <option value="YOUTUBE">YouTube</option>
-                    </select>
-                    <input
-                      type="text"
-                      className="flex-1 bg-[#171a21] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3 py-2.5 text-white text-xs focus:outline-none transition-colors placeholder-gray-600"
-                      value={productForm.mediaUrlInput}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setProductForm(prev => ({
-                          ...prev,
-                          mediaUrlInput: val,
-                          mediaList: [
-                            { url: val, type: prev.mediaTypeInput || 'IMAGE', isPrimary: true, color: null },
-                            ...prev.mediaList.filter(m => !m.isPrimary && m.color !== null)
-                          ]
-                        }));
-                      }}
-                      placeholder="URL da mídia ou use a Biblioteca →"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { setActiveMediaColor(null); setIsMediaModalOpen(true); }}
-                      className="bg-tactical-gold hover:bg-tactical-goldHover text-black px-4 py-2.5 rounded-lg font-bold flex items-center gap-1.5 shadow transition-all text-xs flex-shrink-0"
-                    >
-                      <Upload className="w-3.5 h-3.5" /> Upload
-                    </button>
-                  </div>
-                  {productForm.mediaUrlInput && (
-                    <div className="flex items-center gap-3 pt-1">
-                      <div className="w-14 h-14 bg-black rounded-lg border border-gray-700 overflow-hidden flex-shrink-0 shadow-inner">
-                        <MediaViewer mediaUrl={productForm.mediaUrlInput} mediaType={productForm.mediaTypeInput} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="text-[11px] text-emerald-400 font-bold flex items-center gap-1.5 bg-emerald-900/20 border border-emerald-800/40 px-3 py-1.5 rounded-lg">
-                        <Check className="w-3.5 h-3.5" /> Capa da vitrine vinculada
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ── SEÇÃO 3: VARIANTES ── */}
-              <div className="rounded-lg border border-gray-800 bg-[#0f1115] overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 bg-[#13161d] border-b border-gray-800">
-                  <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-[11px] font-black flex items-center justify-center flex-shrink-0">3</div>
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-3.5 h-3.5 text-tactical-gold" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-gray-200">Variantes & Atributos</span>
-                  </div>
-                </div>
-                <div className="p-1">
-                  <ProductVariantEditor
-                    variants={productForm.variants || []}
-                    mediaList={productForm.mediaList || []}
-                    onChangeVariants={(variants) => setProductForm(prev => ({ ...prev, variants }))}
-                    onChangeMedia={(mediaList) => setProductForm(prev => ({ ...prev, mediaList }))}
-                    onOpenMediaPicker={(color) => { setActiveMediaColor(color); setIsMediaModalOpen(true); }}
-                  />
-                </div>
-              </div>
-
-              {/* ── SEÇÃO 4: PREÇOS ── */}
-              <div className="rounded-lg border border-gray-800 bg-[#0f1115] overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 bg-[#13161d] border-b border-gray-800">
-                  <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-[11px] font-black flex items-center justify-center flex-shrink-0">4</div>
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-3.5 h-3.5 text-tactical-gold" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-gray-200">Precificação</span>
-                  </div>
-                </div>
-                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">Preço Normal *</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        className="w-full bg-[#171a21] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg pl-9 pr-3 py-2.5 text-white text-xs font-mono font-bold focus:outline-none transition-colors"
-                        value={productForm.price}
-                        onChange={(e) => setProductForm({...productForm, price: e.target.value})}
-                        placeholder="299.90"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">
-                      Preço Promocional <span className="text-gray-600 normal-case">(opcional)</span>
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 text-xs font-bold">R$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="w-full bg-[#171a21] border border-gray-700 hover:border-gray-600 focus:border-amber-500 rounded-lg pl-9 pr-3 py-2.5 text-amber-400 text-xs font-mono font-bold focus:outline-none transition-colors placeholder-gray-600"
-                        value={productForm.promoPrice}
-                        onChange={(e) => setProductForm({...productForm, promoPrice: e.target.value})}
-                        placeholder="249.90"
-                      />
-                    </div>
-                    {productForm.price && productForm.promoPrice && Number(productForm.promoPrice) < Number(productForm.price) && (
-                      <p className="mt-1 text-[10px] text-emerald-400 flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        Desconto de {Math.round((1 - Number(productForm.promoPrice) / Number(productForm.price)) * 100)}% aplicado
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* ── SEÇÃO 5: DESCRIÇÃO ── */}
-              <div className="rounded-lg border border-gray-800 bg-[#0f1115] overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 bg-[#13161d] border-b border-gray-800">
-                  <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-[11px] font-black flex items-center justify-center flex-shrink-0">5</div>
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-3.5 h-3.5 text-tactical-gold" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-gray-200">Descrição Técnica</span>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <textarea
-                    rows="3"
-                    className="w-full bg-[#171a21] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3 py-2.5 text-white text-xs focus:outline-none transition-colors placeholder-gray-600 resize-none"
-                    value={productForm.description}
-                    onChange={(e) => setProductForm({...productForm, description: e.target.value})}
-                    placeholder="Especificações técnicas: material, dimensões, capacidade, certificações..."
-                  />
-                </div>
-              </div>
-
-              {/* ── SEÇÃO 6: ENTREGA & ESTOQUE ── */}
-              <div className="rounded-lg border border-gray-800 bg-[#0f1115] overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 bg-[#13161d] border-b border-gray-800">
-                  <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-[11px] font-black flex items-center justify-center flex-shrink-0">6</div>
-                  <div className="flex items-center gap-2">
-                    <Truck className="w-3.5 h-3.5 text-tactical-gold" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-gray-200">Entrega & Estoque</span>
-                  </div>
-                </div>
-                <div className="p-4 space-y-3">
-                  <label className="flex items-start gap-3 cursor-pointer bg-[#171a21] hover:bg-[#1c1f28] p-3 rounded-lg border border-gray-800 hover:border-amber-800/50 transition-all">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 mt-0.5 rounded accent-amber-500 flex-shrink-0"
-                      checked={productForm.isMadeToOrder}
-                      onChange={(e) => setProductForm({...productForm, isMadeToOrder: e.target.checked})}
-                    />
-                    <div>
-                      <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
-                        <Package className="w-3.5 h-3.5" /> Produto Sob Encomenda
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Produção personalizada — ex: Toalhas Bordadas, Fardamentos, Sob Medida</p>
-                    </div>
-                  </label>
-
-                  {productForm.isMadeToOrder && (
-                    <div className="border-l-2 border-amber-500 pl-4 bg-[#171a21] p-3 rounded-r-lg border border-gray-800 space-y-2">
-                      <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                        <Clock className="w-3 h-3" /> Prazo de Produção (dias úteis)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        className="w-full bg-[#0f1115] border border-gray-700 focus:border-amber-500 rounded-lg px-3 py-2.5 text-white text-xs font-bold font-mono focus:outline-none transition-colors"
-                        value={productForm.productionDays}
-                        onChange={(e) => setProductForm({...productForm, productionDays: e.target.value})}
-                        placeholder="ex: 5"
-                      />
-                      <p className="text-[10px] text-gray-500">
-                        O cliente verá: <span className="text-amber-400">"Sob encomenda — pronto em {productForm.productionDays || '?'} dias úteis"</span>
-                      </p>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">Estoque Total Disponível</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-full bg-[#171a21] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3 py-2.5 text-white text-xs font-mono font-bold focus:outline-none transition-colors"
-                        value={productForm.stock}
-                        onChange={(e) => setProductForm({...productForm, stock: e.target.value})}
-                        placeholder="0 = esgotado"
-                      />
-                    </div>
-                    <p className="mt-1 text-[10px] text-gray-600">Deixe 0 para exibir como esgotado na loja</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── BOTÃO DE SUBMIT ── */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-tactical-gold hover:bg-tactical-goldHover disabled:opacity-50 disabled:cursor-not-allowed text-black font-tactical text-lg font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3"
-              >
-                {loading ? (
-                  <><RefreshCw className="w-5 h-5 animate-spin" /> Salvando...</>
-                ) : productForm.id ? (
-                  <><Save className="w-5 h-5" /> ATUALIZAR PRODUTO</>
-                ) : (
-                  <><Plus className="w-5 h-5" /> SALVAR NO CATÁLOGO</>
-                )}
-              </button>
-            </form>
+            {/* BOTÃO PARA ADD NOVO PRODUTO (ABRE MODAL) */}
+            <button
+              onClick={() => {
+                resetProductForm();
+                setIsProductModalOpen(true);
+              }}
+              className="bg-tactical-gold hover:bg-tactical-goldHover text-black font-tactical text-sm sm:text-base font-bold px-5 py-3 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 uppercase tracking-wider flex-shrink-0"
+            >
+              <Plus className="w-5 h-5" /> ADD NOVO PRODUTO
+            </button>
           </div>
 
-          {/* ════════════════════════════════ */}
-          {/* PAINEL DE CATÁLOGO DE PRODUTOS   */}
-          {/* ════════════════════════════════ */}
-          <div className="lg:col-span-5 space-y-3">
-
-            {/* Header catálogo */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-tactical text-sm font-bold text-white uppercase tracking-wider">Catálogo</h3>
-                <p className="text-[10px] text-gray-500">{filteredProducts.length} produto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}</p>
-              </div>
-            </div>
-
-            {/* Busca */}
-            <div className="flex items-center gap-2 bg-[#0f1115] px-3 py-2.5 rounded-lg border border-gray-800 focus-within:border-gray-600 transition-colors">
-              <Search className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-              <input
-                type="text"
-                placeholder="Buscar por nome do produto..."
-                className="bg-transparent text-xs text-white focus:outline-none w-full placeholder-gray-600"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            {/* Lista */}
-            <div className="space-y-2 max-h-[680px] overflow-y-auto pr-1 scrollbar-thin">
-              {filteredProducts.length === 0 && (
-                <div className="text-center py-12 text-gray-600">
-                  <ShoppingBag className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-xs">Nenhum produto encontrado</p>
-                </div>
-              )}
-              {filteredProducts.map((p) => {
+          {/* GRADE DE CARDS DOS PRODUTOS DO CATÁLOGO */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+            {products
+              .filter(p => {
+                const matchSearch = !searchTerm || p.title.toLowerCase().includes(searchTerm.toLowerCase()) || p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchCat = selectedCategoryFilter === 'ALL' || p.categoryId === selectedCategoryFilter;
+                return matchSearch && matchCat;
+              })
+              .map((p) => {
                 const mediaUrl = p.media?.[0]?.url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400';
-                const isBeingEdited = productForm.id === p.id;
                 return (
-                  <div
-                    key={p.id}
-                    className={`group p-3 rounded-lg border flex gap-3 items-center transition-all ${
-                      isBeingEdited
-                        ? 'bg-tactical-gold/5 border-tactical-gold/40 shadow-sm'
-                        : 'bg-[#171a21] border-gray-800 hover:border-gray-700'
-                    }`}
-                  >
-                    <div className="w-14 h-14 rounded-lg overflow-hidden bg-black flex-shrink-0 border border-gray-700 shadow-inner">
-                      <MediaViewer mediaUrl={mediaUrl} mediaType={p.media?.[0]?.type || 'IMAGE'} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-white text-[11px] leading-tight truncate mb-0.5">{p.title}</h4>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[9px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{p.category?.name || 'Sem Cat.'}</span>
+                  <div key={p.id} className="bg-[#171a21] border border-gray-800 hover:border-gray-700 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition-all group">
+                    <div className="space-y-3">
+                      {/* Imagem Capa */}
+                      <div className="aspect-video bg-black relative overflow-hidden border-b border-gray-800">
+                        <MediaViewer mediaUrl={mediaUrl} mediaType={p.media?.[0]?.type || 'IMAGE'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <span className="absolute top-2.5 left-2.5 bg-black/80 backdrop-blur-md text-tactical-gold border border-tactical-gold/30 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                          {p.category?.name || 'Geral'}
+                        </span>
                         {p.isMadeToOrder && (
-                          <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                            <Truck className="w-2.5 h-2.5" /> Encomenda
+                          <span className="absolute top-2.5 right-2.5 bg-amber-500 text-black font-extrabold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1 shadow">
+                            <Truck className="w-3 h-3" /> Sob Encomenda
                           </span>
                         )}
-                        {p.stock === 0 && (
-                          <span className="bg-red-500/15 text-red-400 border border-red-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded">Esgotado</span>
-                        )}
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-tactical-gold font-bold text-xs">R$ {parseFloat(p.price).toFixed(2)}</span>
-                        {p.promoPrice && (
-                          <span className="text-emerald-400 text-[10px] font-bold">→ R$ {parseFloat(p.promoPrice).toFixed(2)}</span>
+
+                      {/* Conteúdo do Card */}
+                      <div className="p-4 space-y-2">
+                        <h3 className="font-bold text-white text-sm line-clamp-2 leading-snug">{p.title}</h3>
+                        
+                        <div className="flex items-center justify-between pt-1">
+                          <div>
+                            <span className="text-tactical-gold font-mono font-bold text-base">R$ {parseFloat(p.price).toFixed(2)}</span>
+                            {p.promoPrice && (
+                              <span className="text-emerald-400 text-xs font-mono font-bold block">
+                                Promo: R$ {parseFloat(p.promoPrice).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-right">
+                            {p.stock === 0 ? (
+                              <span className="text-[10px] font-bold text-sky-400 bg-sky-950/80 border border-sky-800/40 px-2 py-1 rounded-md">
+                                Simbólico
+                              </span>
+                            ) : p.stock < 0 ? (
+                              <span className="text-[10px] font-bold text-red-400 bg-red-950/80 border border-red-800/40 px-2 py-1 rounded-md">
+                                Esgotado
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/40 px-2 py-1 rounded-md">
+                                {p.stock} un.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {p.variants && p.variants.length > 0 && (
+                          <div className="text-[11px] text-gray-400 bg-[#0f1115] px-2.5 py-1.5 rounded-lg border border-gray-800 flex items-center justify-between">
+                            <span className="font-semibold text-gray-300">Variantes:</span>
+                            <span className="font-mono text-tactical-gold font-bold">{p.variants.length} opções</span>
+                          </div>
                         )}
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                    {/* Botões de Ação na Card */}
+                    <div className="p-4 pt-0 grid grid-cols-2 gap-2 border-t border-gray-800/60 mt-3">
                       <button
-                        onClick={() => setProductForm({
-                          id: p.id, title: p.title, slug: p.slug, description: p.description || '',
-                          price: p.price, promoPrice: p.promoPrice || '', stock: p.stock,
-                          isBestseller: p.isBestseller, isMadeToOrder: p.isMadeToOrder || false,
-                          productionDays: p.productionDays || 0, categoryId: p.categoryId || '',
-                          mediaUrlInput: mediaUrl, mediaTypeInput: p.media?.[0]?.type || 'IMAGE',
-                          mediaList: p.media || [], variants: p.variants || []
-                        })}
-                        className="p-2 bg-[#0f1115] text-gray-300 hover:text-tactical-gold rounded-lg border border-gray-700 hover:border-tactical-gold/40 transition-all"
-                        title="Editar"
+                        onClick={() => {
+                          setProductForm({
+                            id: p.id,
+                            title: p.title || '',
+                            slug: p.slug || '',
+                            description: p.description || '',
+                            price: p.price ? String(p.price) : '',
+                            promoPrice: p.promoPrice ? String(p.promoPrice) : '',
+                            stock: p.stock || 0,
+                            isBestseller: p.isBestseller || false,
+                            isMadeToOrder: p.isMadeToOrder || false,
+                            productionDays: p.productionDays || 0,
+                            categoryId: p.categoryId || '',
+                            mediaUrlInput: p.media?.[0]?.url || '',
+                            mediaTypeInput: p.media?.[0]?.type || 'IMAGE',
+                            mediaList: p.media || [],
+                            variants: p.variants || []
+                          });
+                          setIsProductModalOpen(true);
+                        }}
+                        className="bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                       >
-                        <Edit className="w-3 h-3" />
+                        <Edit className="w-3.5 h-3.5 text-tactical-gold" /> Editar
                       </button>
+
                       <button
                         onClick={() => handleDeleteProduct(p.id)}
-                        className="p-2 bg-[#0f1115] text-gray-500 hover:text-red-400 rounded-lg border border-gray-700 hover:border-red-900 transition-all"
-                        title="Excluir"
+                        className="bg-red-950/40 hover:bg-red-900/60 text-red-300 text-xs font-bold py-2 rounded-lg transition-colors border border-red-900/50 flex items-center justify-center gap-1.5"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" /> Excluir
                       </button>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* MODAL OVERLAY: FORMULÁRIO COMPLETO DE CADASTRAR/EDITAR   */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {isProductModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+              <div className="w-full max-w-4xl bg-[#0f1115] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+                
+                {/* Topbar do Modal */}
+                <div className="px-6 py-4 bg-[#13161d] border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-tactical-gold/10 border border-tactical-gold/30 flex items-center justify-center">
+                      <Plus className="w-4 h-4 text-tactical-gold" />
+                    </div>
+                    <div>
+                      <h2 className="font-tactical text-xl font-bold text-white leading-none">
+                        {productForm.id ? 'EDITAR PRODUTO' : 'CADASTRAR NOVO PRODUTO'}
+                      </h2>
+                      <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+                        <Check className="w-3.5 h-3.5" /> Rascunho salvo no servidor em tempo real
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setIsProductModalOpen(false)}
+                    className="text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 w-8 h-8 rounded-lg flex items-center justify-center transition-colors font-bold text-base"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Form Body com Rolagem */}
+                <div className="p-6 overflow-y-auto space-y-6 scrollbar-thin">
+                  <form onSubmit={async (e) => {
+                    await handleSaveProduct(e);
+                    setIsProductModalOpen(false);
+                  }} className="space-y-5 sm:space-y-6">
+
+                    {/* ── SEÇÃO 1: IDENTIFICAÇÃO ── */}
+                    <div className="rounded-xl border border-gray-800 bg-[#171a21] overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 bg-[#13161d] border-b border-gray-800">
+                        <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-xs font-black flex items-center justify-center flex-shrink-0">1</div>
+                        <div className="flex items-center gap-2">
+                          <Tag className="w-4 h-4 text-tactical-gold" />
+                          <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">Identificação do Produto</span>
+                        </div>
+                      </div>
+                      <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">Título do Produto *</label>
+                          <input
+                            type="text"
+                            required
+                            className="w-full bg-[#0f1115] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none transition-colors placeholder-gray-500"
+                            value={productForm.title}
+                            onChange={(e) => setProductForm({...productForm, title: e.target.value})}
+                            placeholder="ex: Colete Plate Carrier Spec-Ops"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">Categoria *</label>
+                          <select
+                            className="w-full bg-[#0f1115] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3.5 py-2.5 text-xs sm:text-sm text-white font-bold focus:outline-none transition-colors"
+                            value={productForm.categoryId}
+                            onChange={(e) => setProductForm({...productForm, categoryId: e.target.value})}
+                          >
+                            <option value="">-- Selecione uma Categoria --</option>
+                            {categories.map((cat) => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── SEÇÃO 2: MÍDIA PRINCIPAL ── */}
+                    <div className="rounded-xl border border-gray-800 bg-[#171a21] overflow-hidden shadow-sm">
+                      <div className="flex items-center justify-between px-5 py-3.5 bg-[#13161d] border-b border-gray-800">
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-xs font-black flex items-center justify-center flex-shrink-0">2</div>
+                          <div className="flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-tactical-gold" />
+                            <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">Foto / Mídia Principal</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setActiveMediaColor(null); setIsMediaModalOpen(true); }}
+                          className="text-xs bg-tactical-gold/10 hover:bg-tactical-gold/20 text-tactical-gold px-3.5 py-1.5 rounded-lg border border-tactical-gold/30 font-bold flex items-center gap-1.5 transition-all"
+                        >
+                          <HardDriveUpload className="w-3.5 h-3.5" /> Biblioteca de Mídias
+                        </button>
+                      </div>
+                      <div className="p-5 sm:p-6 space-y-4">
+                        <div className="flex gap-2.5">
+                          <select
+                            className="bg-[#0f1115] border border-gray-700 text-white rounded-lg px-3.5 py-2.5 text-xs sm:text-sm font-bold focus:outline-none focus:border-tactical-gold flex-shrink-0"
+                            value={productForm.mediaTypeInput}
+                            onChange={(e) => setProductForm({...productForm, mediaTypeInput: e.target.value})}
+                          >
+                            <option value="IMAGE">Imagem</option>
+                            <option value="VIDEO_FILE">Vídeo MP4</option>
+                            <option value="YOUTUBE">YouTube</option>
+                          </select>
+                          <input
+                            type="text"
+                            className="flex-1 bg-[#0f1115] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none transition-colors placeholder-gray-500"
+                            value={productForm.mediaUrlInput}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setProductForm(prev => ({
+                                ...prev,
+                                mediaUrlInput: val,
+                                mediaList: [
+                                  { url: val, type: prev.mediaTypeInput || 'IMAGE', isPrimary: true, color: null },
+                                  ...prev.mediaList.filter(m => !m.isPrimary && m.color !== null)
+                                ]
+                              }));
+                            }}
+                            placeholder="URL da mídia ou use a Biblioteca →"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setActiveMediaColor(null); setIsMediaModalOpen(true); }}
+                            className="bg-tactical-gold hover:bg-tactical-goldHover text-black px-4 py-2.5 rounded-lg font-bold flex items-center gap-1.5 shadow transition-all text-xs sm:text-sm flex-shrink-0"
+                          >
+                            <Upload className="w-4 h-4" /> Upload
+                          </button>
+                        </div>
+                        {productForm.mediaUrlInput && (
+                          <div className="flex items-center gap-3 pt-1">
+                            <div className="w-16 h-16 bg-black rounded-lg border border-gray-700 overflow-hidden flex-shrink-0 shadow-inner">
+                              <MediaViewer mediaUrl={productForm.mediaUrlInput} mediaType={productForm.mediaTypeInput} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 bg-emerald-900/20 border border-emerald-800/40 px-3.5 py-2 rounded-lg">
+                              <Check className="w-4 h-4" /> Capa da vitrine vinculada
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── SEÇÃO 3: VARIANTES ── */}
+                    <div className="rounded-xl border border-gray-800 bg-[#171a21] overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 bg-[#13161d] border-b border-gray-800">
+                        <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-xs font-black flex items-center justify-center flex-shrink-0">3</div>
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-4 h-4 text-tactical-gold" />
+                          <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">Variantes & Atributos</span>
+                        </div>
+                      </div>
+                      <div className="p-1">
+                        <ProductVariantEditor
+                          variants={productForm.variants || []}
+                          mediaList={productForm.mediaList || []}
+                          onChangeVariants={(variants) => setProductForm(prev => ({ ...prev, variants }))}
+                          onChangeMedia={(mediaList) => setProductForm(prev => ({ ...prev, mediaList }))}
+                          onOpenMediaPicker={(color) => { setActiveMediaColor(color); setIsMediaModalOpen(true); }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* ── SEÇÃO 4: PREÇOS ── */}
+                    <div className="rounded-xl border border-gray-800 bg-[#171a21] overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 bg-[#13161d] border-b border-gray-800">
+                        <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-xs font-black flex items-center justify-center flex-shrink-0">4</div>
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4 text-tactical-gold" />
+                          <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">Precificação</span>
+                        </div>
+                      </div>
+                      <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">Preço Normal *</label>
+                          <div className="relative">
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              className="w-full bg-[#0f1115] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg pl-10 pr-3.5 py-2.5 text-white text-xs sm:text-sm font-mono font-bold focus:outline-none transition-colors"
+                              value={productForm.price}
+                              onChange={(e) => setProductForm({...productForm, price: e.target.value})}
+                              onFocus={(e) => e.target.select()}
+                              placeholder="299.90 (Simbólico)"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">
+                            Preço Promocional <span className="text-gray-500 normal-case">(opcional)</span>
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-amber-500 text-xs font-bold">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="w-full bg-[#0f1115] border border-gray-700 hover:border-gray-600 focus:border-amber-500 rounded-lg pl-10 pr-3.5 py-2.5 text-amber-400 text-xs sm:text-sm font-mono font-bold focus:outline-none transition-colors placeholder-gray-500"
+                              value={productForm.promoPrice}
+                              onChange={(e) => setProductForm({...productForm, promoPrice: e.target.value})}
+                              onFocus={(e) => e.target.select()}
+                              placeholder="249.90 (Simbólico)"
+                            />
+                          </div>
+                          {productForm.price && productForm.promoPrice && Number(productForm.promoPrice) < Number(productForm.price) && (
+                            <p className="mt-1.5 text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Desconto de {Math.round((1 - Number(productForm.promoPrice) / Number(productForm.price)) * 100)}% aplicado
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── SEÇÃO 5: DESCRIÇÃO ── */}
+                    <div className="rounded-xl border border-gray-800 bg-[#171a21] overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 bg-[#13161d] border-b border-gray-800">
+                        <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-xs font-black flex items-center justify-center flex-shrink-0">5</div>
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-tactical-gold" />
+                          <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">Descrição Técnica</span>
+                        </div>
+                      </div>
+                      <div className="p-5 sm:p-6">
+                        <textarea
+                          rows="3"
+                          className="w-full bg-[#0f1115] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3.5 py-2.5 text-white text-xs sm:text-sm focus:outline-none transition-colors placeholder-gray-500 resize-none leading-relaxed"
+                          value={productForm.description}
+                          onChange={(e) => setProductForm({...productForm, description: e.target.value})}
+                          placeholder="Especificações técnicas: material, dimensões, capacidade, certificações..."
+                        />
+                      </div>
+                    </div>
+
+                    {/* ── SEÇÃO 6: ENTREGA & ESTOQUE ── */}
+                    <div className="rounded-xl border border-gray-800 bg-[#171a21] overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-3 px-5 py-3.5 bg-[#13161d] border-b border-gray-800">
+                        <div className="w-6 h-6 rounded-full bg-tactical-gold text-black text-xs font-black flex items-center justify-center flex-shrink-0">6</div>
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-4 h-4 text-tactical-gold" />
+                          <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">Entrega & Estoque</span>
+                        </div>
+                      </div>
+                      <div className="p-5 sm:p-6 space-y-4">
+                        <label className="flex items-start gap-3 cursor-pointer bg-[#0f1115] hover:bg-[#13161d] p-4 rounded-xl border border-gray-800 hover:border-amber-800/50 transition-all">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 mt-0.5 rounded accent-amber-500 flex-shrink-0"
+                            checked={productForm.isMadeToOrder}
+                            onChange={(e) => setProductForm({...productForm, isMadeToOrder: e.target.checked})}
+                          />
+                          <div>
+                            <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-amber-400">
+                              <Package className="w-4 h-4" /> Produto Sob Encomenda
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">Produção personalizada — ex: Toalhas Bordadas, Fardamentos, Sob Medida</p>
+                          </div>
+                        </label>
+
+                        {productForm.isMadeToOrder && (
+                          <div className="border-l-2 border-amber-500 pl-4 bg-[#0f1115] p-4 rounded-r-xl border border-gray-800 space-y-2">
+                            <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-300">
+                              <Clock className="w-4 h-4 text-amber-400" /> Prazo de Produção (dias úteis)
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              className="w-full bg-[#171a21] border border-gray-700 focus:border-amber-500 rounded-lg px-3.5 py-2.5 text-white text-xs sm:text-sm font-bold font-mono focus:outline-none transition-colors"
+                              value={productForm.productionDays}
+                              onChange={(e) => setProductForm({...productForm, productionDays: e.target.value})}
+                              onFocus={(e) => e.target.select()}
+                              placeholder="ex: 5 (Simbólico)"
+                            />
+                            <p className="text-xs text-gray-400">
+                              O cliente verá: <span className="text-amber-400 font-bold">"Sob encomenda — pronto em {productForm.productionDays || '?'} dias úteis"</span>
+                            </p>
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">Estoque Total Disponível</label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              className="w-full bg-[#0f1115] border border-gray-700 hover:border-gray-600 focus:border-tactical-gold rounded-lg px-3.5 py-2.5 text-white text-xs sm:text-sm font-mono font-bold focus:outline-none transition-colors"
+                              value={productForm.stock}
+                              onChange={(e) => setProductForm({...productForm, stock: e.target.value})}
+                              onFocus={(e) => e.target.select()}
+                              placeholder="0 (Simbólico / Ilimitado)"
+                            />
+                          </div>
+                          <p className="mt-1.5 text-xs text-tactical-gold font-medium">💡 Nota: 0 = Estoque Simbólico (Disponível normalmente na loja)</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── BOTÃO DE SUBMIT ── */}
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-tactical-gold hover:bg-tactical-goldHover text-black font-tactical text-base sm:text-lg font-bold py-3.5 px-6 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
+                    >
+                      <Save className="w-5 h-5" />
+                      {loading ? 'SALVANDO PRODUTO...' : productForm.id ? 'ATUALIZAR PRODUTO NO CATÁLOGO' : 'CADASTRAR NOVO PRODUTO NO CATÁLOGO'}
+                    </button>
+                  </form>
+                </div>
+
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 
@@ -1910,7 +2355,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="font-tactical text-3xl font-bold text-white flex items-center gap-2">
-                <HardDrive className="w-6 h-6 text-tactical-gold" /> ECOSISTEMA DE BACKUP AUTOMÁTICO & GOOGLE DRIVE
+                <HardDrive className="w-6 h-6 text-tactical-gold" /> ECOSSISTEMA DE BACKUP AUTOMÁTICO & GOOGLE DRIVE
               </h2>
               <p className="text-gray-400 text-xs mt-1">Backups compactados em formato .ZIP gerados automaticamente a cada alteração no sistema.</p>
               
@@ -2123,15 +2568,169 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         </div>
       )}
 
-      {/* === MÓDULO 10: 🤖 BOT WHATSAPP === */}
+      {/* === MÓDULO 10: 🤖 BOT WHATSAPP & REDIRECIONAMENTO === */}
       {activeTab === 'bot' && (
         <div className="space-y-6">
-          <div className="bg-[#171a21] p-8 rounded border border-gray-800 text-center space-y-4 max-w-2xl mx-auto">
-            <Smartphone className="w-12 h-12 text-tactical-gold mx-auto" />
-            <h2 className="font-tactical text-3xl font-bold text-white">BOT WHATSAPP BAILEYS OPERACIONAL</h2>
-            <p className="text-gray-400 text-xs">
-              O bot consulta produtos no banco SQLite e verifica status de pedidos dos clientes em tempo real.
-            </p>
+          <div className="bg-[#171a21] p-6 rounded-lg border border-gray-800 space-y-6">
+            
+            <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-gray-800 gap-4">
+              <div>
+                <h2 className="font-tactical text-3xl font-bold text-white flex items-center gap-2">
+                  <Smartphone className="w-7 h-7 text-tactical-gold" /> GESTÃO DE MENSAGENS E BOT WHATSAPP
+                </h2>
+                <p className="text-gray-400 text-xs mt-1">
+                  Configure o modo de atendimento por WhatsApp: Respostas Automáticas (Bot Baileys) ou Redirecionamento Direto.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchBotConfig}
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded text-xs font-bold flex items-center gap-1.5 border border-gray-700"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Atualizar Status
+                </button>
+                <button
+                  onClick={handleRestartBot}
+                  disabled={botLoading || !botConfig.isBotEnabled}
+                  className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-bold flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Reconectar Bot
+                </button>
+              </div>
+            </div>
+
+            {/* Badge de Status de Conexão */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-[#0f1115] p-4 rounded border border-gray-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase block">Modo Operacional do WhatsApp</span>
+                  <span className="text-sm font-bold text-white font-tactical">
+                    {botConfig.isBotEnabled ? '🤖 BOT AUTOMÁTICO ATIVADO' : '🔗 LINK DIRETO (SEM BOT)'}
+                  </span>
+                </div>
+                <div className={`px-3 py-1 rounded text-xs font-bold font-mono ${
+                  botConfig.isBotEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                }`}>
+                  {botConfig.isBotEnabled ? 'BOT ATIVO' : 'BOT DESATIVADO'}
+                </div>
+              </div>
+
+              <div className="bg-[#0f1115] p-4 rounded border border-gray-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase block">Status da Conexão WhatsApp</span>
+                  <span className="text-sm font-bold text-white font-tactical uppercase">
+                    {botConfig.connectionStatus === 'CONNECTED' && '🟢 CONECTADO E PRONTO'}
+                    {botConfig.connectionStatus === 'QR_READY' && '📱 AGUARDANDO ESCANEAR QR CODE'}
+                    {botConfig.connectionStatus === 'CONNECTING' && '⏳ INICIALIZANDO CONEXÃO...'}
+                    {botConfig.connectionStatus === 'DISCONNECTED' && '🛑 DESCONECTADO'}
+                  </span>
+                </div>
+                <div className={`w-3.5 h-3.5 rounded-full animate-pulse ${
+                  botConfig.connectionStatus === 'CONNECTED' ? 'bg-emerald-500' :
+                  botConfig.connectionStatus === 'QR_READY' ? 'bg-amber-500' :
+                  botConfig.connectionStatus === 'CONNECTING' ? 'bg-sky-500' : 'bg-red-500'
+                }`} />
+              </div>
+            </div>
+
+            {/* QR Code de Conexão se Disponível */}
+            {botConfig.qrCodeData && botConfig.isBotEnabled && (
+              <div className="bg-gradient-to-r from-amber-950/40 via-yellow-950/20 to-black p-6 rounded-lg border border-amber-500/40 flex flex-col md:flex-row items-center gap-6 shadow-2xl">
+                <div className="bg-white p-3 rounded-lg shadow-xl flex-shrink-0">
+                  <img src={botConfig.qrCodeData} alt="WhatsApp Bot QR Code" className="w-48 h-48 object-contain" />
+                </div>
+                <div className="space-y-3">
+                  <span className="px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded text-[10px] font-bold uppercase">
+                    📱 Conexão Requerida
+                  </span>
+                  <h3 className="font-tactical text-2xl font-bold text-white">ESCANEIE O QR CODE NO SEU WHATSAPP</h3>
+                  <ol className="text-xs text-gray-300 space-y-1.5 list-decimal pl-4">
+                    <li>Abra o WhatsApp no seu smartphone.</li>
+                    <li>Toque em <strong>Configurações / Menu (⋮)</strong> e selecione <strong>Dispositivos Conectados</strong>.</li>
+                    <li>Toque em <strong>Conectar um dispositivo</strong> e aponte a câmera para a imagem ao lado.</li>
+                  </ol>
+                  <p className="text-[11px] text-amber-300 font-bold pt-1">
+                    ⚡ Após a leitura, o bot assumirá as respostas automáticas do número configurado.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Formulário de Configuração */}
+            <form onSubmit={handleSaveBotConfig} className="space-y-6 pt-2">
+              
+              {/* Botão de Alternância Ativar / Desativar Bot */}
+              <div className="bg-[#0f1115] p-5 rounded-lg border border-gray-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-tactical text-xl font-bold text-white block">ATIVAR BOT AUTOMÁTICO DE RESPOSTAS</label>
+                    <p className="text-gray-400 text-xs mt-0.5">
+                      Quando desativado, o checkout criará apenas um link direto (<code className="text-tactical-gold">wa.me</code>) para o WhatsApp da loja sem automação.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBotConfig(prev => ({ ...prev, isBotEnabled: !prev.isBotEnabled }))}
+                    className={`w-16 h-8 rounded-full p-1 transition-colors duration-300 focus:outline-none ${
+                      botConfig.isBotEnabled ? 'bg-emerald-600' : 'bg-gray-800'
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-full bg-white transition-transform duration-300 ${
+                      botConfig.isBotEnabled ? 'translate-x-8' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Número do WhatsApp da Loja */}
+              <div className="bg-[#0f1115] p-5 rounded-lg border border-gray-800 space-y-2">
+                <label className="block text-xs font-bold uppercase text-tactical-gold">
+                  NÚMERO DO WHATSAPP DA LOJA (COM DDD E CÓDIGO DO PAÍS) *
+                </label>
+                <p className="text-gray-400 text-xs">
+                  Este número receberá as mensagens dos pedidos do carrinho (formato padrão: 55 + DDD + Número).
+                </p>
+                <input
+                  type="text"
+                  required
+                  className="w-full bg-[#181b22] border border-gray-700 text-white font-mono text-sm px-4 py-2.5 rounded focus:outline-none focus:border-tactical-gold"
+                  value={botConfig.whatsappNumber}
+                  onChange={(e) => setBotConfig(prev => ({ ...prev, whatsappNumber: e.target.value }))}
+                  placeholder="5511999998888"
+                />
+              </div>
+
+              {/* Mensagem de Boas-Vindas / Menu Automático */}
+              <div className="bg-[#0f1115] p-5 rounded-lg border border-gray-800 space-y-2">
+                <label className="block text-xs font-bold uppercase text-tactical-gold">
+                  MENSAGEM DE BOAS-VINDAS & MENU PADRÃO DO BOT
+                </label>
+                <p className="text-gray-400 text-xs">
+                  Texto enviado automaticamente ao receber "menu", "olá" ou primeiro contato dos clientes.
+                </p>
+                <textarea
+                  rows="6"
+                  className="w-full bg-[#181b22] border border-gray-700 text-white text-xs font-mono px-4 py-3 rounded focus:outline-none focus:border-tactical-gold"
+                  value={botConfig.welcomeMessage || ''}
+                  onChange={(e) => setBotConfig(prev => ({ ...prev, welcomeMessage: e.target.value }))}
+                  placeholder="🤖 *Atendimento Automático Gama Store*..."
+                />
+              </div>
+
+              {/* Botão de Salvar */}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={botLoading}
+                  className="bg-tactical-gold hover:bg-tactical-goldHover text-black font-tactical text-xl font-bold px-8 py-3 rounded shadow-lg transition-all flex items-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  <span>{botLoading ? 'SALVANDO...' : '💾 SALVAR CONFIGURAÇÕES DO WHATSAPP'}</span>
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}

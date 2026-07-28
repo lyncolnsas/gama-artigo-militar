@@ -10,10 +10,11 @@ frontend/node_modules/
 .env.production.local
 backup_config.json
 
-# Database & SQLite
+# Database & SQLite & Baileys Auth
 prisma/*.db
 prisma/*.db-journal
 *.db
+auth_baileys/
 
 # Backups & Temporary Directories
 backups/

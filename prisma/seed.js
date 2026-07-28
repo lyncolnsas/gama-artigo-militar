@@ -10,6 +10,18 @@ async function main() {
   const adminPassword = await bcrypt.hash('admin123', 10);
   const managerPassword = await bcrypt.hash('manager123', 10);
 
+  // Configuração Padrão do WhatsApp Bot
+  await prisma.botConfig.upsert({
+    where: { id: 'default' },
+    update: {},
+    create: {
+      id: 'default',
+      isBotEnabled: true,
+      whatsappNumber: '5511999998888',
+      welcomeMessage: '🤖 *Atendimento Automático Gama Store*\n\nSeja bem-vindo ao nosso catálogo tático!\nComo posso te ajudar?\n\n1️⃣ Ver produtos mais vendidos\n2️⃣ Buscar produto por nome (ex: busca colete)\n3️⃣ Consultar status de pedido (ex: status GS-123456)\n4️⃣ Falar com atendente humano'
+    }
+  });
+
   await prisma.user.upsert({
     where: { email: 'admin@gamastore.com' },
     update: {},
@@ -171,7 +183,12 @@ async function main() {
       subtitle: 'Líder em vestuário e equipamentos táticos com atendimento 100% dinâmico via WhatsApp.',
       buttonText: 'WhatsApp: (+55) 11 99999-8888|Email: contato@gamastore.com.br|Segunda a Sexta: 08h às 18h',
       featuredTitle: 'NAVEGAÇÃO RÁPIDA',
-      featuredLabel: 'ATENDIMENTO'
+      featuredLabel: 'ATENDIMENTO',
+      navLinks: 'Home:#|Catálogo:#bestsellers|Categorias:#categorias|Ofertas Especiais:#promocao',
+      secTitle: 'SEGURANÇA & PAGAMENTO',
+      secText: 'Ambiente 100% seguro com criptografia de ponta a ponta.',
+      paymentBadges: 'PIX|Cartão|Boleto',
+      copyrightText: '© 2026 TACTIKO / GAMA STORE. Todos os direitos reservados.'
     }
   ];
 

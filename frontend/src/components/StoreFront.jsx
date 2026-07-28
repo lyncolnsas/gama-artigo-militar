@@ -52,7 +52,7 @@ export default function StoreFront({
     TOPBAR: {
       title: 'Atendimento: (+55) 11 99999-8888',
       subtitle: 'Avaliação 4.9/5.0',
-      buttonText: 'CUMPOM: TACTICO5 (-5% OFF)'
+      buttonText: 'CUPOM: TACTICO5 (-5% OFF)'
     },
     HEADER: {
       title: 'TACTIKO',
@@ -348,11 +348,35 @@ export default function StoreFront({
     ? []
     : categories.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
+  // Rastreamento de Pesquisas de Clientes (para Analytics)
+  useEffect(() => {
+    if (!searchTerm || searchTerm.trim().length < 2) return;
+    const timer = setTimeout(() => {
+      const term = searchTerm.trim();
+      const count = products.filter(p => 
+        p.title.toLowerCase().includes(term.toLowerCase()) ||
+        p.description?.toLowerCase().includes(term.toLowerCase()) ||
+        p.category?.name?.toLowerCase().includes(term.toLowerCase())
+      ).length;
+
+      fetch('/api/analytics/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: term, resultsCount: count })
+      }).catch(() => {});
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, products]);
+
   // Abrir Modal de Produto
   const handleOpenProductDetail = (product) => {
     setActiveProductForModal(product);
     setIsDetailModalOpen(true);
     setIsSearchOpen(false);
+    if (product && product.id) {
+      fetch(`/api/products/${product.id}/view`, { method: 'POST' }).catch(() => {});
+    }
   };
 
   // Tratamento ao Clicar em Adicionar ao Pedido
@@ -392,7 +416,7 @@ export default function StoreFront({
 
             <div className="flex items-center gap-4 text-gray-400">
               <span className="bg-tactical-gold/10 text-tactical-gold px-2.5 py-0.5 rounded font-bold border border-tactical-gold/30">
-                {sections.TOPBAR?.buttonText || 'CUMPOM: TACTICO5 (-5% OFF)'}
+                {sections.TOPBAR?.buttonText || 'CUPOM: TACTICO5 (-5% OFF)'}
               </span>
               
               {currentUser && (
@@ -1038,31 +1062,44 @@ export default function StoreFront({
         </section>
       </EditableSection>
 
-      {/* 9. FOOTER - 100% CMS-DRIVEN */}
+      {/* 9. FOOTER - 100% EDITÁVEL VIA CMS */}
       <EditableSection sectionKey="FOOTER_CONTACT" isCmsMode={isCmsMode} onEditSection={onEditSection}>
         <footer className="bg-black text-gray-400 py-12 text-xs border-t border-gray-900">
           <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
+            
+            {/* Coluna 1: Nome da Loja & Descrição */}
             <div>
               <div className="font-tactical text-3xl font-bold text-white tracking-wider mb-2">
-                {sections.FOOTER_CONTACT?.title || sections.FOOTER?.title || 'TACTIKO / GAMA STORE'}
+                {sections.FOOTER_CONTACT?.title || 'TACTIKO / GAMA STORE'}
               </div>
               <p className="text-gray-500 leading-relaxed">
-                {sections.FOOTER_CONTACT?.subtitle || sections.FOOTER?.subtitle}
+                {sections.FOOTER_CONTACT?.subtitle || 'Líder em vestuário e equipamentos táticos com atendimento 100% dinâmico via WhatsApp.'}
               </p>
             </div>
 
+            {/* Coluna 2: Navegação Rápida */}
             <div>
               <h5 className="font-tactical text-lg font-bold text-white mb-3 tracking-wider">
                 {sections.FOOTER_CONTACT?.featuredTitle || 'NAVEGAÇÃO RÁPIDA'}
               </h5>
               <ul className="space-y-1.5">
-                <li><a href="#" className="hover:text-tactical-gold">Home</a></li>
-                <li><a href="#bestsellers" className="hover:text-tactical-gold">Catálogo</a></li>
-                <li><a href="#categorias" className="hover:text-tactical-gold">Categorias</a></li>
-                <li><a href="#promocao" className="hover:text-tactical-gold">Ofertas Especiais</a></li>
+                {(sections.FOOTER_CONTACT?.navLinks || 'Home:#|Catálogo:#bestsellers|Categorias:#categorias|Ofertas Especiais:#promocao')
+                  .split('|').map((item, i) => {
+                    const parts = item.split(':');
+                    const label = parts[0];
+                    const href = parts[1] || '#';
+                    return (
+                      <li key={i}>
+                        <a href={href} className="hover:text-tactical-gold transition-colors">
+                          {label}
+                        </a>
+                      </li>
+                    );
+                  })}
               </ul>
             </div>
 
+            {/* Coluna 3: Atendimento */}
             <div>
               <h5 className="font-tactical text-lg font-bold text-white mb-3 tracking-wider">
                 {sections.FOOTER_CONTACT?.featuredLabel || 'ATENDIMENTO'}
@@ -1073,18 +1110,29 @@ export default function StoreFront({
               </ul>
             </div>
 
+            {/* Coluna 4: Segurança & Pagamento */}
             <div>
-              <h5 className="font-tactical text-lg font-bold text-white mb-3 tracking-wider">SEGURANÇA & PAGAMENTO</h5>
-              <p className="text-gray-500 mb-2">Ambiente 100% seguro com criptografia de ponta a ponta.</p>
-              <div className="flex gap-2">
-                <span className="bg-gray-900 px-2 py-1 rounded text-[10px] font-bold text-gray-300 border border-gray-800">PIX</span>
-                <span className="bg-gray-900 px-2 py-1 rounded text-[10px] font-bold text-gray-300 border border-gray-800">Cartão</span>
-                <span className="bg-gray-900 px-2 py-1 rounded text-[10px] font-bold text-gray-300 border border-gray-800">Boleto</span>
+              <h5 className="font-tactical text-lg font-bold text-white mb-3 tracking-wider">
+                {sections.FOOTER_CONTACT?.secTitle || 'SEGURANÇA & PAGAMENTO'}
+              </h5>
+              <p className="text-gray-500 mb-2">
+                {sections.FOOTER_CONTACT?.secText || 'Ambiente 100% seguro com criptografia de ponta a ponta.'}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {(sections.FOOTER_CONTACT?.paymentBadges || 'PIX|Cartão|Boleto')
+                  .split('|').map((badge, idx) => (
+                    <span key={idx} className="bg-gray-900 px-2 py-1 rounded text-[10px] font-bold text-gray-300 border border-gray-800">
+                      {badge.trim()}
+                    </span>
+                  ))}
               </div>
             </div>
+
           </div>
+
+          {/* Rodapé / Copyright */}
           <div className="max-w-7xl mx-auto px-4 mt-8 pt-6 border-t border-gray-900 text-center text-gray-600 text-[11px]">
-            &copy; {new Date().getFullYear()} {sections.FOOTER_CONTACT?.title || 'Gama Store / Tactiko'}. Todos os direitos reservados.
+            {sections.FOOTER_CONTACT?.copyrightText || `© ${new Date().getFullYear()} TACTIKO / GAMA STORE. Todos os direitos reservados.`}
           </div>
         </footer>
       </EditableSection>

@@ -212,7 +212,8 @@ export default function ProductDetailModal({ product, isOpen, onClose, onAddToCa
                 <div className="grid grid-cols-4 sm:grid-cols-4 gap-1.5">
                   {availableSizesForColor.map((v) => {
                     const isSelected = selectedSize === v.size;
-                    const isOutOfStock = v.stock <= 0;
+                    // Estoque 0 é simbólico: a variante permanece disponível para compra normalmente
+                    const isOutOfStock = v.stock < 0;
 
                     return (
                       <button
@@ -229,7 +230,7 @@ export default function ProductDetailModal({ product, isOpen, onClose, onAddToCa
                       >
                         <div className="text-xs sm:text-sm">{v.size}</div>
                         <div className="text-[8px] sm:text-[9px] font-sans font-normal text-gray-400">
-                          {isOutOfStock ? 'Esgotado' : `${v.stock} un.`}
+                          {isOutOfStock ? 'Esgotado' : (v.stock > 0 ? `${v.stock} un.` : 'Em Estoque')}
                         </div>
                       </button>
                     );

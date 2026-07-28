@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { whatsappBotService } from '../services/whatsappBotService.js';
 
 const prisma = new PrismaClient();
 
@@ -21,6 +22,14 @@ export const createOrder = async (req, res) => {
     if (!customerName || !customerPhone || !shippingAddress) {
       return res.status(400).json({ error: 'Nome, Telefone e Endereço de entrega são obrigatórios.' });
     }
+
+    // Obter Configurações do Bot do Banco
+    let botConfig = await prisma.botConfig.findUnique({ where: { id: 'default' } });
+    if (!botConfig) {
+      botConfig = { isBotEnabled: true, whatsappNumber: '5511999998888' };
+    }
+
+    const storeWhatsappPhone = (botConfig.whatsappNumber || process.env.STORE_WHATSAPP_NUMBER || '5511999998888').replace(/\D/g, '');
 
     // Calcular Subtotal
     let subtotal = 0;
@@ -95,8 +104,7 @@ export const createOrder = async (req, res) => {
       }
     });
 
-    // Formatar mensagem para o WhatsApp da Loja
-    const storeWhatsappPhone = process.env.STORE_WHATSAPP_NUMBER || '5511999998888';
+    // Formatar mensagem para o WhatsApp da Loja / Redirecionamento
     let waText = `📦 *SOLICITAÇÃO DE PEDIDO DE MATERIAIS*\n\n`;
     waText += `📋 *Pedido N°:* ${orderNumber}\n`;
     waText += `👤 *Cliente:* ${customerName}\n`;
@@ -108,14 +116,25 @@ export const createOrder = async (req, res) => {
     }
     waText += `💰 *Valor Total:* R$ ${finalAmount.toFixed(2)}\n`;
     waText += `💳 *Forma de Pagamento:* ${paymentMethod}\n\n`;
-    waText += `🤖 *Aguardando confirmação do atendimento.*`;
+    waText += `🤖 *Status:* ${botConfig.isBotEnabled ? 'Aguardando confirmação do bot automático.' : 'Enviado via link direto.'}`;
 
     const whatsappLink = `https://wa.me/${storeWhatsappPhone}?text=${encodeURIComponent(waText)}`;
+
+    // Se o bot estiver ativado, tentar enviar mensagem automática de confirmação para o cliente
+    if (botConfig.isBotEnabled) {
+      try {
+        const clientMsg = `✅ *PEDIDO REGISTRADO COM SUCESSO!*\n\n` +
+          `Olá ${customerName}, recebemos sua solicitação de materiais (*${orderNumber}*) no valor de *R$ ${finalAmount.toFixed(2)}*.\n` +
+          `Nossa equipe está processando seus itens e você receberá atualizações do status por aqui!`;
+        await whatsappBotService.sendDirectMessage(customerPhone, clientMsg);
+      } catch (e) {}
+    }
 
     return res.status(201).json({
       order: newOrder,
       whatsappText: waText,
-      whatsappLink
+      whatsappLink,
+      isBotEnabled: botConfig.isBotEnabled
     });
   } catch (error) {
     console.error('Erro ao criar pedido de materiais:', error);
@@ -175,6 +194,16 @@ export const updateOrderStatus = async (req, res) => {
       data: { status },
       include: { items: true }
     });
+
+    // Enviar mensagem automática de atualização pelo WhatsApp se o bot estiver ativo
+    try {
+      const botConfig = await prisma.botConfig.findUnique({ where: { id: 'default' } });
+      if (botConfig && botConfig.isBotEnabled) {
+        await whatsappBotService.sendOrderStatusUpdate(order);
+      }
+    } catch (e) {
+      console.error('Erro ao notificar status via WhatsApp:', e);
+    }
 
     return res.json(order);
   } catch (error) {

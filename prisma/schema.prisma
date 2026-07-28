@@ -50,6 +50,7 @@ model Product {
   price        Float
   promoPrice   Float?
   stock        Int            @default(0)
+  viewsCount   Int            @default(0)
   isBestseller Boolean        @default(false)
   isMadeToOrder Boolean       @default(false)
   productionDays Int?         @default(0)
@@ -172,3 +173,30 @@ model Wishlist {
 
   @@unique([userId, productId])
 }
+
+// 8. Configuração do WhatsApp & Bot
+model BotConfig {
+  id              String   @id @default("default")
+  isBotEnabled    Boolean  @default(true)
+  whatsappNumber  String   @default("5511999998888")
+  welcomeMessage  String?  @default("🤖 *Atendimento Automático Gama Store*\n\nSeja bem-vindo ao nosso catálogo tático!\nComo posso te ajudar?\n\n1️⃣ Ver produtos mais vendidos\n2️⃣ Buscar produto por nome (ex: busca colete)\n3️⃣ Consultar status de pedido (ex: status GS-123456)\n4️⃣ Falar com atendente humano")
+  autoRepliesJson String?
+  updatedAt       DateTime @updatedAt
+}
+
+// 9. Pesquisas de Clientes (Analytics)
+model SearchLog {
+  id           String   @id @default(uuid())
+  query        String
+  resultsCount Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+// 10. Rascunho Automático de Produto em Edição (Multi-device / Persistente)
+model ProductDraft {
+  id        String   @id @default("admin_draft")
+  dataJson  String
+  updatedAt DateTime @updatedAt
+}
+
+

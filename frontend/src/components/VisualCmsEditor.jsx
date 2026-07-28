@@ -230,150 +230,290 @@ export default function VisualCmsEditor({
                   </div>
                 </div>
               )}
-              
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Titulo Principal</label>
-                <input
-                  type="text"
-                  className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none transition"
-                  value={form.title || ''}
-                  onChange={e => updateField('title', e.target.value)}
-                  placeholder="Título principal da seção..."
-                />
-              </div>
 
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Subtitulo / Descricao / Labels extras</label>
-                <textarea
-                  rows={3}
-                  className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none transition resize-none"
-                  value={form.subtitle || ''}
-                  onChange={e => updateField('subtitle', e.target.value)}
-                  placeholder="Descrição ou textos extras (separados por | se necessário)..."
-                />
-              </div>
-
-              {/* Extra Campos */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Título Destaque</label>
-                  <input
-                    type="text"
-                    className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
-                    value={form.featuredTitle || ''}
-                    onChange={e => updateField('featuredTitle', e.target.value)}
-                    placeholder="Ex: OUTERWEAR..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Selo / Tagline</label>
-                  <input
-                    type="text"
-                    className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
-                    value={form.featuredLabel || ''}
-                    onChange={e => updateField('featuredLabel', e.target.value)}
-                    placeholder="Ex: 50% OFF..."
-                  />
-                </div>
-              </div>
-
-              {/* Media */}
-              <div className="bg-[#0f1115] p-4 rounded border border-gray-800 space-y-3">
-                <div className="flex justify-between items-center flex-wrap gap-2">
-                  <label className="block text-[10px] font-bold uppercase text-tactical-gold">
-                    Mídia da Seção (Imagem ou Vídeo)
-                  </label>
-
-                  <div className="flex items-center gap-2">
-                    {/* Botão de Upload Direto do Computador */}
-                    <label className="bg-tactical-gold hover:bg-tactical-goldHover text-black text-[11px] font-tactical font-extrabold px-3 py-1.5 rounded cursor-pointer flex items-center gap-1.5 transition-all shadow">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{uploading ? 'ENVIANDO...' : 'ENVIAR FOTO/VÍDEO'}</span>
-                      <input
-                        type="file"
-                        accept="image/*,video/mp4"
-                        className="hidden"
-                        disabled={uploading}
-                        onChange={(e) => {
-                          if (onUpload) {
-                            onUpload(e, (url, type) => {
-                              updateField('mediaUrl', url);
-                              updateField('mediaType', type);
-                            });
-                          }
-                        }}
-                      />
-                    </label>
-
-                    {/* Botão de Abrir Galeria */}
-                    <button
-                      type="button"
-                      onClick={() => setIsMediaOpen(true)}
-                      className="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-[11px] font-bold px-3 py-1.5 rounded flex items-center gap-1 transition-all border border-gray-700"
-                    >
-                      <HardDriveUpload className="w-3.5 h-3.5 text-tactical-gold" /> Galeria
-                    </button>
+              {/* Seletor Especial para RODAPÉ / CONTATO (FOOTER_CONTACT 100% EDITÁVEL) */}
+              {activeKey === 'FOOTER_CONTACT' && (
+                <div className="bg-[#0f1115] p-4 rounded-lg border border-tactical-gold/50 space-y-4 shadow-xl text-xs">
+                  <div className="border-b border-gray-800 pb-2">
+                    <span className="font-tactical font-bold text-tactical-gold uppercase text-sm block">
+                      📍 CONFIGURAÇÃO COMPLETA DO RODAPÉ (FOOTER 100% EDITÁVEL)
+                    </span>
+                    <p className="text-[11px] text-gray-400">Edite todos os textos, links, colunas, pagamentos e direitos autorais do rodapé.</p>
                   </div>
-                </div>
 
-                <div className="flex gap-2">
-                  <select
-                    className="bg-[#171a21] border border-gray-700 text-white rounded px-2 text-xs"
-                    value={form.mediaType || 'IMAGE'}
-                    onChange={e => updateField('mediaType', e.target.value)}
-                  >
-                    <option value="IMAGE">Imagem</option>
-                    <option value="VIDEO_FILE">Vídeo MP4</option>
-                    <option value="YOUTUBE">YouTube</option>
-                  </select>
-
-                  <input
-                    type="text"
-                    className="flex-1 bg-[#171a21] border border-gray-700 rounded px-3 py-1.5 text-white text-xs focus:border-tactical-gold focus:outline-none"
-                    value={form.mediaUrl || ''}
-                    onChange={e => updateField('mediaUrl', e.target.value)}
-                    placeholder="Cole a URL ou clique em ENVIAR FOTO/VÍDEO acima..."
-                  />
-                </div>
-
-                {/* Pré-visualização ao Vivo da Imagem/Vídeo */}
-                {form.mediaUrl && (
-                  <div className="mt-2 relative aspect-video bg-black rounded overflow-hidden border border-gray-800">
-                    <MediaViewer
-                      mediaUrl={form.mediaUrl}
-                      mediaType={form.mediaType || 'IMAGE'}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute top-2 left-2 bg-black/70 text-tactical-gold text-[9px] font-bold px-2 py-0.5 rounded border border-tactical-gold/30 uppercase">
-                      Pré-visualização ao vivo
+                  {/* Coluna 1 */}
+                  <div className="space-y-2 bg-[#171a21] p-3 rounded border border-gray-700">
+                    <span className="font-bold text-white uppercase text-[10px] block text-tactical-gold">📌 Coluna 1: Marca & Descrição</span>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Nome da Marca / Título</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs font-bold focus:border-tactical-gold focus:outline-none"
+                        value={form.title || ''}
+                        onChange={e => updateField('title', e.target.value)}
+                        placeholder="ex: TACTIKO / GAMA STORE"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Descrição Institucional</label>
+                      <textarea
+                        rows={2}
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs focus:border-tactical-gold focus:outline-none"
+                        value={form.subtitle || ''}
+                        onChange={e => updateField('subtitle', e.target.value)}
+                        placeholder="Descrição abaixo da marca..."
+                      />
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* CTA */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Texto do Botão (CTA)</label>
-                  <input
-                    type="text"
-                    className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
-                    value={form.buttonText || ''}
-                    onChange={e => updateField('buttonText', e.target.value)}
-                    placeholder="Ex: COMPRAR"
-                  />
+                  {/* Coluna 2 */}
+                  <div className="space-y-2 bg-[#171a21] p-3 rounded border border-gray-700">
+                    <span className="font-bold text-white uppercase text-[10px] block text-tactical-gold">🔗 Coluna 2: Navegação Rápida</span>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Título da Coluna 2</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs font-bold focus:border-tactical-gold focus:outline-none"
+                        value={form.featuredTitle || ''}
+                        onChange={e => updateField('featuredTitle', e.target.value)}
+                        placeholder="ex: NAVEGAÇÃO RÁPIDA"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Links de Navegação (Formato: Nome:Link | Nome:Link)</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs font-mono focus:border-tactical-gold focus:outline-none"
+                        value={form.navLinks || ''}
+                        onChange={e => updateField('navLinks', e.target.value)}
+                        placeholder="Home:#|Catálogo:#bestsellers|Categorias:#categorias|Ofertas Especiais:#promocao"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Coluna 3 */}
+                  <div className="space-y-2 bg-[#171a21] p-3 rounded border border-gray-700">
+                    <span className="font-bold text-white uppercase text-[10px] block text-tactical-gold">📞 Coluna 3: Atendimento</span>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Título da Coluna 3</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs font-bold focus:border-tactical-gold focus:outline-none"
+                        value={form.featuredLabel || ''}
+                        onChange={e => updateField('featuredLabel', e.target.value)}
+                        placeholder="ex: ATENDIMENTO"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Linhas de Contato (Separadas por |)</label>
+                      <textarea
+                        rows={3}
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs font-mono focus:border-tactical-gold focus:outline-none"
+                        value={form.buttonText || ''}
+                        onChange={e => updateField('buttonText', e.target.value)}
+                        placeholder="WhatsApp: (+55) 11 99999-8888|Email: contato@gamastore.com.br|Segunda a Sexta: 08h às 18h"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Coluna 4 */}
+                  <div className="space-y-2 bg-[#171a21] p-3 rounded border border-gray-700">
+                    <span className="font-bold text-white uppercase text-[10px] block text-tactical-gold">🛡️ Coluna 4: Segurança & Pagamentos</span>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Título da Coluna 4</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs font-bold focus:border-tactical-gold focus:outline-none"
+                        value={form.secTitle || ''}
+                        onChange={e => updateField('secTitle', e.target.value)}
+                        placeholder="ex: SEGURANÇA & PAGAMENTO"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Texto de Segurança</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs focus:border-tactical-gold focus:outline-none"
+                        value={form.secText || ''}
+                        onChange={e => updateField('secText', e.target.value)}
+                        placeholder="ex: Ambiente 100% seguro com criptografia de ponta a ponta."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Badges de Pagamento (Separados por |)</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs font-mono focus:border-tactical-gold focus:outline-none"
+                        value={form.paymentBadges || ''}
+                        onChange={e => updateField('paymentBadges', e.target.value)}
+                        placeholder="PIX|Cartão|Boleto|Transferência"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Copyright */}
+                  <div className="space-y-1 bg-[#171a21] p-3 rounded border border-gray-700">
+                    <span className="font-bold text-white uppercase text-[10px] block text-tactical-gold">©️ Direitos Autorais / Copyright</span>
+                    <input
+                      type="text"
+                      className="w-full bg-[#0f1115] border border-gray-700 rounded px-2.5 py-1.5 text-white text-xs focus:border-tactical-gold focus:outline-none"
+                      value={form.copyrightText || ''}
+                      onChange={e => updateField('copyrightText', e.target.value)}
+                      placeholder="© 2026 TACTIKO / GAMA STORE. Todos os direitos reservados."
+                    />
+                  </div>
+
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Link do Botão</label>
-                  <input
-                    type="text"
-                    className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
-                    value={form.buttonLink || ''}
-                    onChange={e => updateField('buttonLink', e.target.value)}
-                    placeholder="Ex: #bestsellers"
-                  />
-                </div>
-              </div>
+              )}
+              
+              {/* Campos Genéricos (apenas se não for FOOTER_CONTACT) */}
+              {activeKey !== 'FOOTER_CONTACT' && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Título Principal</label>
+                    <input
+                      type="text"
+                      className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none transition"
+                      value={form.title || ''}
+                      onChange={e => updateField('title', e.target.value)}
+                      placeholder="Título principal da seção..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Subtítulo / Descrição / Rótulos Extras</label>
+                    <textarea
+                      rows={3}
+                      className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none transition resize-none"
+                      value={form.subtitle || ''}
+                      onChange={e => updateField('subtitle', e.target.value)}
+                      placeholder="Descrição ou textos extras (separados por | se necessário)..."
+                    />
+                  </div>
+
+                  {/* Extra Campos */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Título Destaque</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
+                        value={form.featuredTitle || ''}
+                        onChange={e => updateField('featuredTitle', e.target.value)}
+                        placeholder="Ex: OUTERWEAR..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Selo / Tagline</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
+                        value={form.featuredLabel || ''}
+                        onChange={e => updateField('featuredLabel', e.target.value)}
+                        placeholder="Ex: 50% OFF..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Media */}
+                  <div className="bg-[#0f1115] p-4 rounded border border-gray-800 space-y-3">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
+                      <label className="block text-[10px] font-bold uppercase text-tactical-gold">
+                        Mídia da Seção (Imagem ou Vídeo)
+                      </label>
+
+                      <div className="flex items-center gap-2">
+                        {/* Botão de Upload Direto do Computador */}
+                        <label className="bg-tactical-gold hover:bg-tactical-goldHover text-black text-[11px] font-tactical font-extrabold px-3 py-1.5 rounded cursor-pointer flex items-center gap-1.5 transition-all shadow">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{uploading ? 'ENVIANDO...' : 'ENVIAR FOTO/VÍDEO'}</span>
+                          <input
+                            type="file"
+                            accept="image/*,video/mp4"
+                            className="hidden"
+                            disabled={uploading}
+                            onChange={(e) => {
+                              if (onUpload) {
+                                onUpload(e, (url, type) => {
+                                  updateField('mediaUrl', url);
+                                  updateField('mediaType', type);
+                                });
+                              }
+                            }}
+                          />
+                        </label>
+
+                        {/* Botão de Abrir Galeria */}
+                        <button
+                          type="button"
+                          onClick={() => setIsMediaOpen(true)}
+                          className="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-[11px] font-bold px-3 py-1.5 rounded flex items-center gap-1 transition-all border border-gray-700"
+                        >
+                          <HardDriveUpload className="w-3.5 h-3.5 text-tactical-gold" /> Galeria
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <select
+                        className="bg-[#171a21] border border-gray-700 text-white rounded px-2 text-xs"
+                        value={form.mediaType || 'IMAGE'}
+                        onChange={e => updateField('mediaType', e.target.value)}
+                      >
+                        <option value="IMAGE">Imagem</option>
+                        <option value="VIDEO_FILE">Vídeo MP4</option>
+                        <option value="YOUTUBE">YouTube</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        className="flex-1 bg-[#171a21] border border-gray-700 rounded px-3 py-1.5 text-white text-xs focus:border-tactical-gold focus:outline-none"
+                        value={form.mediaUrl || ''}
+                        onChange={e => updateField('mediaUrl', e.target.value)}
+                        placeholder="Cole a URL ou clique em ENVIAR FOTO/VÍDEO acima..."
+                      />
+                    </div>
+
+                    {/* Pré-visualização ao Vivo da Imagem/Vídeo */}
+                    {form.mediaUrl && (
+                      <div className="mt-2 relative aspect-video bg-black rounded overflow-hidden border border-gray-800">
+                        <MediaViewer
+                          mediaUrl={form.mediaUrl}
+                          mediaType={form.mediaType || 'IMAGE'}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-2 left-2 bg-black/70 text-tactical-gold text-[9px] font-bold px-2 py-0.5 rounded border border-tactical-gold/30 uppercase">
+                          Pré-visualização ao vivo
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CTA */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Texto do Botão (CTA)</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
+                        value={form.buttonText || ''}
+                        onChange={e => updateField('buttonText', e.target.value)}
+                        placeholder="Ex: COMPRAR"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1">Link do Botão</label>
+                      <input
+                        type="text"
+                        className="w-full bg-[#0f1115] border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-tactical-gold focus:outline-none"
+                        value={form.buttonLink || ''}
+                        onChange={e => updateField('buttonLink', e.target.value)}
+                        placeholder="Ex: #bestsellers"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Modal Footer */}

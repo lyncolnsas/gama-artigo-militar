@@ -15,7 +15,13 @@ import {
   getProductBySlug, 
   createProduct, 
   updateProduct, 
-  deleteProduct 
+  deleteProduct,
+  getDraft,
+  saveDraft,
+  clearDraft,
+  trackProductView,
+  trackSearchQuery,
+  getDetailedAnalytics
 } from './controllers/productController.js';
 import { 
   getSections, 
@@ -28,7 +34,9 @@ import { createOrder, getOrders, getMyOrders, updateOrderStatus, getAnalytics, d
 import { getCategories, createCategory, updateCategory, deleteCategory, getBrands, createBrand } from './controllers/categoryController.js';
 import { createBackupHandler, getBackupsHandler, downloadBackupHandler, deleteBackupHandler, restoreBackupHandler, getBackupConfigHandler, saveBackupConfigHandler } from './controllers/backupController.js';
 import { getMediaLibrary, deleteMedia } from './controllers/mediaLibraryController.js';
+import { getBotConfigHandler, updateBotConfigHandler, restartBotHandler, getPublicBotConfigHandler } from './controllers/botController.js';
 import { triggerAutoBackup } from './services/backupService.js';
+import { whatsappBotService } from './services/whatsappBotService.js';
 
 dotenv.config();
 
@@ -57,12 +65,17 @@ app.post('/api/upload', upload.single('media'), handleUploadResponse);
 app.get('/api/admin/media-library', verifyToken, requireRole(['ADMIN', 'MANAGER']), getMediaLibrary);
 app.delete('/api/admin/media-library/:filename', verifyToken, requireRole(['ADMIN', 'MANAGER']), deleteMedia);
 
-// --- ROTAS DE PRODUTOS ---
+// --- ROTAS DE PRODUTOS & RASCUNHOS ---
 app.get('/api/products', getProducts);
 app.get('/api/products/:slug', getProductBySlug);
 app.post('/api/products', verifyToken, requireRole(['ADMIN', 'MANAGER']), createProduct);
 app.put('/api/products/:id', verifyToken, requireRole(['ADMIN', 'MANAGER']), updateProduct);
 app.delete('/api/products/:id', verifyToken, requireRole(['ADMIN', 'MANAGER']), deleteProduct);
+app.post('/api/products/:id/view', trackProductView);
+
+app.get('/api/admin/products/draft', verifyToken, requireRole(['ADMIN', 'MANAGER']), getDraft);
+app.post('/api/admin/products/draft', verifyToken, requireRole(['ADMIN', 'MANAGER']), saveDraft);
+app.delete('/api/admin/products/draft', verifyToken, requireRole(['ADMIN', 'MANAGER']), clearDraft);
 
 // --- ROTAS DE CATEGORIAS E MARCAS ---
 app.get('/api/categories', getCategories);
@@ -113,8 +126,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- ANALYTICS DASHBOARD ---
+// --- ANALYTICS DASHBOARD & SEARCH LOG ---
 app.get('/api/analytics', verifyToken, requireRole(['ADMIN', 'MANAGER']), getAnalytics);
+app.get('/api/admin/analytics/details', verifyToken, requireRole(['ADMIN', 'MANAGER']), getDetailedAnalytics);
+app.post('/api/analytics/search', trackSearchQuery);
+
+// --- ROTAS DO WHATSAPP BOT & CONFIGURAÇÃO ---
+app.get('/api/bot/public-config', getPublicBotConfigHandler);
+app.get('/api/admin/bot/config', verifyToken, requireRole(['ADMIN', 'MANAGER']), getBotConfigHandler);
+app.post('/api/admin/bot/config', verifyToken, requireRole(['ADMIN', 'MANAGER']), updateBotConfigHandler);
+app.post('/api/admin/bot/restart', verifyToken, requireRole(['ADMIN', 'MANAGER']), restartBotHandler);
 
 // Rota de Healthcheck
 app.get('/api/health', (req, res) => {
@@ -125,4 +146,9 @@ app.listen(PORT, () => {
   console.log(`🚀 Gama Store Backend API rodando na porta ${PORT}`);
   console.log(`📖 Swagger API Docs em http://localhost:${PORT}/api-docs`);
   console.log(`📁 Uploads disponíveis em http://localhost:${PORT}/uploads`);
+  
+  // Inicializar serviço do WhatsApp Bot no arranque
+  whatsappBotService.startBot().catch(err => {
+    console.error('Erro ao iniciar o serviço de WhatsApp Bot:', err);
+  });
 });
