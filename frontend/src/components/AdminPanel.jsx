@@ -35,6 +35,12 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
   };
 
   const [authHeader, setAuthHeader] = useState({});
+
+  // Lê o token SEMPRE do localStorage em tempo real (evita race condition com estado React)
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('gama_store_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
   const [currentUser, setCurrentUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -155,12 +161,12 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/auth/users/${userId}/role`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ role })
       });
       if (res.ok) {
         showNotification('Permissão do usuário atualizada!');
-        fetchUsers(authHeader);
+        fetchUsers();
       } else {
         const err = await res.json();
         showNotification(err.error || 'Erro ao alterar permissão.', 'error');
@@ -180,14 +186,14 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/auth/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(userForm)
       });
       if (res.ok) {
         showNotification(`Usuário "${userForm.name}" cadastrado com sucesso!`);
         setUserForm({ name: '', email: '', password: '', role: 'ADMIN' });
         setIsUserModalOpen(false);
-        fetchUsers(authHeader);
+        fetchUsers();
       } else {
         const err = await res.json();
         showNotification(err.error || 'Erro ao cadastrar usuário.', 'error');
@@ -209,7 +215,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/auth/users/${passwordForm.userId}/password`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ newPassword: passwordForm.newPassword })
       });
       if (res.ok) {
@@ -236,11 +242,11 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/auth/users/${userItem.id}`, {
         method: 'DELETE',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification(`Usuário "${userItem.name}" excluído.`);
-        fetchUsers(authHeader);
+        fetchUsers();
       } else {
         const err = await res.json();
         showNotification(err.error || 'Erro ao excluir usuário.', 'error');
@@ -286,18 +292,20 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
       try {
         const u = JSON.parse(userStr);
         if (u.role === 'ADMIN' || u.role === 'MANAGER') {
-          const headers = { 'Authorization': `Bearer ${token}` };
-          setAuthHeader(headers);
+          // Sincroniza estado React, mas os fetchers leem o token do localStorage diretamente
+          setAuthHeader({ 'Authorization': `Bearer ${token}` });
           setCurrentUser(u);
-          fetchAnalytics(headers);
-          fetchDetailedAnalytics(headers);
-          fetchProductDraft(headers);
-          fetchOrders(headers);
-          fetchCoupons(headers);
-          fetchUsers(headers);
-          fetchBackups(headers);
-          fetchMediaLibrary(headers);
-          fetchBotConfig(headers);
+          // Usando getAuthHeaders() inline pois o estado authHeader pode ainda não ter propagado
+          const h = { 'Authorization': `Bearer ${token}` };
+          fetchAnalytics();
+          fetchDetailedAnalytics();
+          fetchProductDraft();
+          fetchOrders();
+          fetchCoupons();
+          fetchUsers();
+          fetchBackups();
+          fetchMediaLibrary();
+          fetchBotConfig();
           return;
         }
       } catch (e) {}
@@ -321,19 +329,18 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
       if (res.ok && (data.user.role === 'ADMIN' || data.user.role === 'MANAGER')) {
         localStorage.setItem('gama_store_token', data.token);
         localStorage.setItem('gama_store_user', JSON.stringify(data.user));
-        const headers = { 'Authorization': `Bearer ${data.token}` };
-        setAuthHeader(headers);
+        setAuthHeader({ 'Authorization': `Bearer ${data.token}` });
         setCurrentUser(data.user);
-
-        fetchAnalytics(headers);
-        fetchDetailedAnalytics(headers);
-        fetchProductDraft(headers);
-        fetchOrders(headers);
-        fetchCoupons(headers);
-        fetchUsers(headers);
-        fetchBackups(headers);
-        fetchMediaLibrary(headers);
-        fetchBotConfig(headers);
+        // Token já está no localStorage, getAuthHeaders() vai encontrá-lo
+        fetchAnalytics();
+        fetchDetailedAnalytics();
+        fetchProductDraft();
+        fetchOrders();
+        fetchCoupons();
+        fetchUsers();
+        fetchBackups();
+        fetchMediaLibrary();
+        fetchBotConfig();
         showNotification(`Bem-vindo, Comandante ${data.user.name}!`);
       } else {
         setLoginError(data.error || 'Credenciais inválidas ou permissão insuficiente.');
@@ -357,24 +364,24 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     setTimeout(() => setMessage(null), 4000);
   };
 
-  // --- FETCHERS ---
-  const fetchAnalytics = async (headers = authHeader) => {
+  // --- FETCHERS (usam getAuthHeaders() para ler token fresh do localStorage) ---
+  const fetchAnalytics = async () => {
     try {
-      const res = await fetch('/api/analytics', { headers });
+      const res = await fetch('/api/analytics', { headers: getAuthHeaders() });
       if (res.ok) setAnalytics(await res.json());
     } catch (e) {}
   };
 
-  const fetchDetailedAnalytics = async (headers = authHeader) => {
+  const fetchDetailedAnalytics = async () => {
     try {
-      const res = await fetch('/api/admin/analytics/details', { headers });
+      const res = await fetch('/api/admin/analytics/details', { headers: getAuthHeaders() });
       if (res.ok) setDetailedAnalytics(await res.json());
     } catch (e) {}
   };
 
-  const fetchProductDraft = async (headers = authHeader) => {
+  const fetchProductDraft = async () => {
     try {
-      const res = await fetch('/api/admin/products/draft', { headers });
+      const res = await fetch('/api/admin/products/draft', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         if (data.draft) setSavedDraft(data);
@@ -391,7 +398,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     const timer = setTimeout(() => {
       fetch('/api/admin/products/draft', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ draftData: productForm })
       }).then(res => {
         if (res.ok) setSavedDraft({ draft: productForm, updatedAt: new Date().toISOString() });
@@ -399,7 +406,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [productForm, isProductModalOpen, authHeader]);
+  }, [productForm, isProductModalOpen]);
 
   const handleRestoreDraft = () => {
     if (savedDraft && savedDraft.draft) {
@@ -411,7 +418,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
 
   const handleDiscardDraft = async () => {
     try {
-      await fetch('/api/admin/products/draft', { method: 'DELETE', headers: authHeader });
+      await fetch('/api/admin/products/draft', { method: 'DELETE', headers: getAuthHeaders() });
       setSavedDraft(null);
       showNotification('Rascunho descartado.');
     } catch (e) {}
@@ -437,23 +444,23 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     } catch (e) {}
   };
 
-  const fetchMediaLibrary = async (headers = authHeader) => {
+  const fetchMediaLibrary = async () => {
     try {
-      const res = await fetch('/api/admin/media-library', { headers });
+      const res = await fetch('/api/admin/media-library', { headers: getAuthHeaders() });
       if (res.ok) setMediaLibrary(await res.json());
     } catch (e) {}
   };
 
-  const fetchOrders = async (headers = authHeader) => {
+  const fetchOrders = async () => {
     try {
-      const res = await fetch('/api/orders', { headers });
+      const res = await fetch('/api/orders', { headers: getAuthHeaders() });
       if (res.ok) setOrders(await res.json());
     } catch (e) {}
   };
 
-  const fetchCoupons = async (headers = authHeader) => {
+  const fetchCoupons = async () => {
     try {
-      const res = await fetch('/api/coupons', { headers });
+      const res = await fetch('/api/coupons', { headers: getAuthHeaders() });
       if (res.ok) setCoupons(await res.json());
     } catch (e) {}
   };
@@ -465,23 +472,23 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     } catch (e) {}
   };
 
-  const fetchUsers = async (headers = authHeader) => {
+  const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/auth/users', { headers });
+      const res = await fetch('/api/auth/users', { headers: getAuthHeaders() });
       if (res.ok) setUsers(await res.json());
     } catch (e) {}
   };
 
-  const fetchBackups = async (headers = authHeader) => {
+  const fetchBackups = async () => {
     try {
-      const res = await fetch('/api/admin/backup', { headers });
+      const res = await fetch('/api/admin/backup', { headers: getAuthHeaders() });
       if (res.ok) setBackups(await res.json());
     } catch (e) {}
   };
 
-  const fetchBotConfig = async (headers = authHeader) => {
+  const fetchBotConfig = async () => {
     try {
-      const res = await fetch('/api/admin/bot/config', { headers });
+      const res = await fetch('/api/admin/bot/config', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setBotConfig(data);
@@ -495,7 +502,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/admin/bot/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           isBotEnabled: botConfig.isBotEnabled,
           whatsappNumber: botConfig.whatsappNumber,
@@ -521,7 +528,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/admin/bot/restart', {
         method: 'POST',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         const data = await res.json();
@@ -550,7 +557,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: authHeader,
+        headers: getAuthHeaders(),
         body: formData
       });
 
@@ -558,7 +565,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
 
       const data = await res.json();
       showNotification(`Upload concluído: ${data.filename}`);
-      fetchMediaLibrary(authHeader);
+      fetchMediaLibrary();
       if (typeof callback === 'function') {
         callback(data.url, data.mediaType);
       }
@@ -664,7 +671,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           name: categoryForm.name,
           image: categoryForm.image,
@@ -676,7 +683,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         showNotification(`Categoria ${isEditing ? 'atualizada' : 'criada'} com sucesso!`);
         setCategoryForm({ id: null, name: '', image: '', description: '' });
         fetchCategories();
-        fetchMediaLibrary(authHeader);
+        fetchMediaLibrary();
       } else {
         showNotification('Erro ao salvar categoria.', 'error');
       }
@@ -690,12 +697,12 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/categories/${id}`, {
         method: 'DELETE',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification('Categoria removida com sucesso!');
         fetchCategories();
-        fetchMediaLibrary(authHeader);
+        fetchMediaLibrary();
       }
     } catch (e) {
       showNotification('Erro ao comunicar com servidor.', 'error');
@@ -707,11 +714,11 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/admin/media-library/${filename}`, {
         method: 'DELETE',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification('Arquivo de mídia excluído permanentemente.');
-        fetchMediaLibrary(authHeader);
+        fetchMediaLibrary();
       } else {
         const err = await res.json();
         showNotification(err.error || 'Erro ao excluir arquivo.', 'error');
@@ -759,14 +766,14 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/sections', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(sectionForm)
       });
 
       if (res.ok) {
         showNotification(`Seção "${sectionForm.sectionKey}" salva no CMS!`);
         fetchSections();
-        fetchMediaLibrary(authHeader);
+        fetchMediaLibrary();
         if (onSectionUpdate) onSectionUpdate();
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -815,7 +822,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(payload)
       });
 
@@ -823,7 +830,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         showNotification(`Produto ${isEditing ? 'atualizado' : 'criado'} com sucesso!`);
         resetProductForm();
         fetchProducts();
-        fetchMediaLibrary(authHeader);
+        fetchMediaLibrary();
         if (onProductUpdate) onProductUpdate();
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -841,12 +848,12 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/products/${id}`, {
         method: 'DELETE',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification('Produto removido.');
         fetchProducts();
-        fetchMediaLibrary(authHeader);
+        fetchMediaLibrary();
         if (onProductUpdate) onProductUpdate();
       }
     } catch (e) {
@@ -858,14 +865,14 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/orders/${id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status })
       });
 
       if (res.ok) {
         showNotification(`Status do pedido alterado para ${status}!`);
-        fetchOrders(authHeader);
-        fetchAnalytics(authHeader);
+        fetchOrders();
+        fetchAnalytics();
       }
     } catch (e) {
       showNotification('Erro ao atualizar pedido.', 'error');
@@ -877,12 +884,12 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/orders/${id}`, {
         method: 'DELETE',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification('Pedido excluído com sucesso.');
-        fetchOrders(authHeader);
-        fetchAnalytics(authHeader);
+        fetchOrders();
+        fetchAnalytics();
       }
     } catch (e) {
       showNotification('Erro ao excluir pedido.', 'error');
@@ -894,13 +901,13 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/coupons', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(couponForm)
       });
       if (res.ok) {
         showNotification('Cupom de desconto criado!');
         setCouponForm({ code: '', discountType: 'PERCENTAGE', value: '5', minSpend: '100', categoryId: '', usageLimit: '500' });
-        fetchCoupons(authHeader);
+        fetchCoupons();
       } else {
         const err = await res.json();
         showNotification(err.error || 'Erro ao criar cupom.', 'error');
@@ -914,11 +921,11 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/coupons/${id}`, {
         method: 'DELETE',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification('Cupom excluído.');
-        fetchCoupons(authHeader);
+        fetchCoupons();
       }
     } catch (e) {
       showNotification('Erro ao remover cupom.', 'error');
@@ -930,11 +937,11 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/admin/backup', {
         method: 'POST',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification('Backup do sistema gerado com sucesso!');
-        fetchBackups(authHeader);
+        fetchBackups();
       } else {
         showNotification('Erro ao gerar backup.', 'error');
       }
@@ -947,7 +954,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
 
   const handleDownloadBackup = async (filename) => {
     try {
-      const res = await fetch(`/api/admin/backup/download/${filename}`, { headers: authHeader });
+      const res = await fetch(`/api/admin/backup/download/${filename}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Erro ao baixar arquivo');
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -970,11 +977,11 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/admin/backup/${filename}`, {
         method: 'DELETE',
-        headers: authHeader
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         showNotification(`Backup "${filename}" excluído com sucesso.`);
-        fetchBackups(authHeader);
+        fetchBackups();
       } else {
         const err = await res.json();
         showNotification(err.error || 'Erro ao excluir backup.', 'error');
@@ -1006,7 +1013,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/admin/backup/config', {
         method: 'POST',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify(backupConfig)
       });
       if (res.ok) {
@@ -1038,7 +1045,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch('/api/admin/backup/restore', {
         method: 'POST',
-        headers: authHeader,
+        headers: getAuthHeaders(),
         body: formData
       });
       const data = await res.json();
@@ -1060,12 +1067,12 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     try {
       const res = await fetch(`/api/auth/users/${id}/role`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ role })
       });
       if (res.ok) {
         showNotification(`Permissão alterada para ${role}!`);
-        fetchUsers(authHeader);
+        fetchUsers();
       }
     } catch (e) {
       showNotification('Erro ao alterar permissão.', 'error');
@@ -3033,3 +3040,4 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     </div>
   );
 }
+

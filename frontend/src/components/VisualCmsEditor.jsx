@@ -22,7 +22,6 @@ export default function VisualCmsEditor({
   sections,
   categories = [],
   products = [],
-  authHeader,
   showNotification,
   onSectionSaved,
   mediaLibrary,
@@ -30,6 +29,11 @@ export default function VisualCmsEditor({
   uploading,
   onDelete,
 }) {
+  // Lê o token sempre do localStorage (evita race condition com estado React do componente pai)
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('gama_store_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
   const [activeKey, setActiveKey] = useState(null);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -67,7 +71,7 @@ export default function VisualCmsEditor({
     try {
       const res = await fetch('/api/sections', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(form),
       });
       if (res.ok) {
@@ -542,7 +546,7 @@ export default function VisualCmsEditor({
           onUpload={onUpload}
           uploading={uploading}
           onDelete={onDelete}
-          authHeader={authHeader}
+          authHeader={getAuthHeaders()}
         />
       )}
     </div>
