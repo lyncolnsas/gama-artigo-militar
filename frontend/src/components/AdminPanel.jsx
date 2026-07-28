@@ -6,7 +6,7 @@ import ProductVariantEditor from './ProductVariantEditor';
 import VisualCmsEditor from './VisualCmsEditor';
 import { 
   Upload, Plus, Trash2, Edit, Save, RefreshCw, CheckCircle, Smartphone, Video, Image, Link as LinkIcon, Star,
-  BarChart3, ShoppingBag, Users, Tag, FolderTree, ShieldCheck, DollarSign, Layers, Clock, HardDrive, Download, Search, MessageCircle, Lock, LogIn, Eye, Monitor, HardDriveUpload, Check, ExternalLink, Sparkles, Camera, FileText, Truck, Package
+  BarChart3, ShoppingBag, Users, Tag, FolderTree, ShieldCheck, DollarSign, Layers, Clock, HardDrive, Download, Search, MessageCircle, Lock, LogIn, Eye, Monitor, HardDriveUpload, Check, ExternalLink, Sparkles, Camera, FileText, Truck, Package, UserPlus, Key
 } from 'lucide-react';
 
 export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToStore }) {
@@ -144,8 +144,111 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
   const [backups, setBackups] = useState([]);
   const [backupLoading, setBackupLoading] = useState(false);
 
-  // 9. Usuários State
+  // 9. Usuários State & Modais
   const [users, setUsers] = useState([]);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN' });
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ userId: '', userName: '', newPassword: '' });
+
+  const handleUpdateUserRole = async (userId, role) => {
+    try {
+      const res = await fetch(`/api/auth/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify({ role })
+      });
+      if (res.ok) {
+        showNotification('Permissão do usuário atualizada!');
+        fetchUsers(authHeader);
+      } else {
+        const err = await res.json();
+        showNotification(err.error || 'Erro ao alterar permissão.', 'error');
+      }
+    } catch (e) {
+      showNotification('Erro ao conectar ao servidor.', 'error');
+    }
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!userForm.name || !userForm.email || !userForm.password) {
+      showNotification('Nome, E-mail e Senha são obrigatórios.', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify(userForm)
+      });
+      if (res.ok) {
+        showNotification(`Usuário "${userForm.name}" cadastrado com sucesso!`);
+        setUserForm({ name: '', email: '', password: '', role: 'ADMIN' });
+        setIsUserModalOpen(false);
+        fetchUsers(authHeader);
+      } else {
+        const err = await res.json();
+        showNotification(err.error || 'Erro ao cadastrar usuário.', 'error');
+      }
+    } catch (e) {
+      showNotification('Erro de conexão com o servidor.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!passwordForm.newPassword || passwordForm.newPassword.length < 4) {
+      showNotification('A nova senha deve ter pelo menos 4 caracteres.', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/auth/users/${passwordForm.userId}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify({ newPassword: passwordForm.newPassword })
+      });
+      if (res.ok) {
+        showNotification(`Senha do usuário "${passwordForm.userName}" alterada com sucesso!`);
+        setPasswordForm({ userId: '', userName: '', newPassword: '' });
+        setIsPasswordModalOpen(false);
+      } else {
+        const err = await res.json();
+        showNotification(err.error || 'Erro ao alterar senha.', 'error');
+      }
+    } catch (e) {
+      showNotification('Erro de conexão com o servidor.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userItem) => {
+    if (currentUser && currentUser.id === userItem.id) {
+      showNotification('Você não pode excluir sua própria conta enquanto estiver logado.', 'error');
+      return;
+    }
+    if (!window.confirm(`Deseja realmente excluir o usuário "${userItem.name}" (${userItem.email})?`)) return;
+    try {
+      const res = await fetch(`/api/auth/users/${userItem.id}`, {
+        method: 'DELETE',
+        headers: authHeader
+      });
+      if (res.ok) {
+        showNotification(`Usuário "${userItem.name}" excluído.`);
+        fetchUsers(authHeader);
+      } else {
+        const err = await res.json();
+        showNotification(err.error || 'Erro ao excluir usuário.', 'error');
+      }
+    } catch (e) {
+      showNotification('Erro de conexão.', 'error');
+    }
+  };
 
   // 10. WhatsApp Bot State
   const [botConfig, setBotConfig] = useState({
@@ -1001,7 +1104,7 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
                 className="w-full bg-[#0f1115] border border-gray-700 text-white text-xs px-3 py-2.5 rounded focus:outline-none focus:border-tactical-gold"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
-                placeholder="admin@gamastore.com"
+                placeholder="admin@gamaartigomilitar.com"
               />
             </div>
 
@@ -1026,10 +1129,6 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
               <span>{loginLoading ? 'AUTENTICANDO...' : 'ENTRAR NO PAINEL ADMIN'}</span>
             </button>
           </form>
-
-          <div className="pt-4 border-t border-gray-800 text-center">
-            <p className="text-gray-500 text-[10px]">Credenciais Padrão Demo: <strong className="text-gray-300">admin@gamastore.com / admin123</strong></p>
-          </div>
         </div>
       </div>
     );
@@ -2546,27 +2645,221 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
 
       {/* === MÓDULO 9: 👥 USUÁRIOS E PERMISSÕES RBAC === */}
       {activeTab === 'users' && (
-        <div className="bg-[#171a21] p-6 rounded border border-gray-800 space-y-4">
-          <h2 className="font-tactical text-3xl font-bold text-white">GESTÃO DE USUÁRIOS E PERMISSÕES (RBAC)</h2>
-          <div className="space-y-3">
+        <div className="bg-[#171a21] p-6 rounded-lg border border-gray-800 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-800">
+            <div>
+              <h2 className="font-tactical text-3xl font-bold text-white flex items-center gap-2">
+                <Users className="w-7 h-7 text-tactical-gold" /> GESTÃO DE USUÁRIOS E PERMISSÕES (RBAC)
+              </h2>
+              <p className="text-gray-400 text-xs mt-1">
+                Adicione novos administradores, altere senhas de acesso e gerencie o nível de permissão do sistema.
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setUserForm({ name: '', email: '', password: '', role: 'ADMIN' });
+                setIsUserModalOpen(true);
+              }}
+              className="bg-tactical-gold hover:bg-tactical-goldHover text-black px-4 py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center gap-2 shadow transition-all flex-shrink-0"
+            >
+              <Plus className="w-4 h-4" /> ADICIONAR NOVO USUÁRIO
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
             {users.map((u) => (
-              <div key={u.id} className="p-3 bg-[#0f1115] rounded border border-gray-800 flex justify-between items-center text-xs">
-                <div>
-                  <div className="font-bold text-white">{u.name}</div>
-                  <div className="text-gray-400">{u.email}</div>
+              <div key={u.id} className="p-4 bg-[#0f1115] rounded-xl border border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-sm">{u.name}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                      u.role === 'ADMIN' ? 'bg-tactical-gold/20 text-tactical-gold border border-tactical-gold/40' :
+                      u.role === 'MANAGER' ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40' :
+                      'bg-gray-800 text-gray-400 border border-gray-700'
+                    }`}>
+                      {u.role}
+                    </span>
+                  </div>
+                  <div className="text-gray-400 text-xs">{u.email}</div>
+                  <div className="text-gray-500 text-[10px]">
+                    Cadastrado em: {new Date(u.createdAt).toLocaleDateString('pt-BR')}
+                  </div>
                 </div>
-                <select
-                  className="bg-[#171a21] border border-gray-700 text-tactical-gold font-bold px-2 py-1 rounded text-xs"
-                  value={u.role}
-                  onChange={(e) => handlePromoteUser(u.id, e.target.value)}
-                >
-                  <option value="CUSTOMER">CUSTOMER</option>
-                  <option value="MANAGER">MANAGER</option>
-                  <option value="ADMIN">ADMIN</option>
-                </select>
+
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <select
+                    className="bg-[#171a21] border border-gray-700 text-tactical-gold font-bold px-3 py-2 rounded-lg text-xs focus:outline-none focus:border-tactical-gold"
+                    value={u.role}
+                    onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                  >
+                    <option value="CUSTOMER">CUSTOMER (Cliente)</option>
+                    <option value="MANAGER">MANAGER (Gerente)</option>
+                    <option value="ADMIN">ADMIN (Administrador)</option>
+                  </select>
+
+                  <button
+                    onClick={() => {
+                      setPasswordForm({ userId: u.id, userName: u.name, newPassword: '' });
+                      setIsPasswordModalOpen(true);
+                    }}
+                    className="bg-gray-800 hover:bg-gray-700 text-tactical-gold hover:text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-gray-700 transition-colors"
+                  >
+                    <Key className="w-3.5 h-3.5" /> Alterar Senha
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteUser(u)}
+                    disabled={currentUser && currentUser.id === u.id}
+                    className="bg-red-950/40 hover:bg-red-900/60 disabled:opacity-30 text-red-300 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 border border-red-900/50 transition-colors"
+                    title="Excluir usuário"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Excluir
+                  </button>
+                </div>
               </div>
             ))}
           </div>
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* MODAL 1: CADASTRAR NOVO USUÁRIO                           */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {isUserModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="w-full max-w-md bg-[#0f1115] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden space-y-5 p-6">
+                <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                  <h3 className="font-tactical text-2xl font-bold text-tactical-gold flex items-center gap-2">
+                    <UserPlus className="w-6 h-6" /> ADICIONAR NOVO USUÁRIO
+                  </h3>
+                  <button onClick={() => setIsUserModalOpen(false)} className="text-gray-400 hover:text-white font-bold text-lg">✕</button>
+                </div>
+
+                <form onSubmit={handleCreateUser} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-gray-300 mb-1">Nome Completo *</label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full bg-[#171a21] border border-gray-700 rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-tactical-gold"
+                      placeholder="ex: Carlos Eduardo"
+                      value={userForm.name}
+                      onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-gray-300 mb-1">E-mail de Acesso *</label>
+                    <input
+                      type="email"
+                      required
+                      className="w-full bg-[#171a21] border border-gray-700 rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-tactical-gold"
+                      placeholder="usuario@gamaartigomilitar.com"
+                      value={userForm.email}
+                      onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-gray-300 mb-1">Senha de Acesso *</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={4}
+                      className="w-full bg-[#171a21] border border-gray-700 rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-tactical-gold"
+                      placeholder="••••••••"
+                      value={userForm.password}
+                      onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-gray-300 mb-1">Nível de Permissão (Role)</label>
+                    <select
+                      className="w-full bg-[#171a21] border border-gray-700 rounded-lg px-3.5 py-2.5 text-xs font-bold text-tactical-gold focus:outline-none focus:border-tactical-gold"
+                      value={userForm.role}
+                      onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                    >
+                      <option value="ADMIN">ADMIN (Administrador Total)</option>
+                      <option value="MANAGER">MANAGER (Gerente Operacional)</option>
+                      <option value="CUSTOMER">CUSTOMER (Cliente)</option>
+                    </select>
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsUserModalOpen(false)}
+                      className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-xs font-bold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="bg-tactical-gold hover:bg-tactical-goldHover text-black px-5 py-2 rounded-lg font-bold text-xs shadow flex items-center gap-1.5"
+                    >
+                      <Save className="w-4 h-4" /> {loading ? 'CADASTRANDO...' : 'CADASTRAR USUÁRIO'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* MODAL 2: ALTERAR SENHA DO USUÁRIO                         */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {isPasswordModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="w-full max-w-md bg-[#0f1115] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden space-y-5 p-6">
+                <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                  <h3 className="font-tactical text-2xl font-bold text-tactical-gold flex items-center gap-2">
+                    <Key className="w-6 h-6" /> ALTERAR SENHA
+                  </h3>
+                  <button onClick={() => setIsPasswordModalOpen(false)} className="text-gray-400 hover:text-white font-bold text-lg">✕</button>
+                </div>
+
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div>
+                    <span className="block text-xs font-bold text-gray-400 uppercase mb-1">Usuário Alvo</span>
+                    <div className="p-3 bg-[#171a21] border border-gray-800 rounded-lg text-white font-bold text-xs">
+                      {passwordForm.userName}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-gray-300 mb-1">Nova Senha de Acesso *</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={4}
+                      className="w-full bg-[#171a21] border border-gray-700 rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-tactical-gold"
+                      placeholder="Digite a nova senha"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsPasswordModalOpen(false)}
+                      className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-xs font-bold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="bg-tactical-gold hover:bg-tactical-goldHover text-black px-5 py-2 rounded-lg font-bold text-xs shadow flex items-center gap-1.5"
+                    >
+                      <Save className="w-4 h-4" /> {loading ? 'SALVANDO...' : 'ATUALIZAR SENHA'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

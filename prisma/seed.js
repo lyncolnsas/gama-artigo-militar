@@ -6,9 +6,10 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Semeando banco de dados completo do Gama Store com TODOS os produtos demo...');
 
-  // 1. Criar Usuários Administradores & Gestores
-  const adminPassword = await bcrypt.hash('admin123', 10);
-  const managerPassword = await bcrypt.hash('manager123', 10);
+  // 1. Limpar e Criar Usuário Administrador Principal
+  await prisma.user.deleteMany({});
+
+  const adminPassword = await bcrypt.hash('22101844bc', 10);
 
   // Configuração Padrão do WhatsApp Bot
   await prisma.botConfig.upsert({
@@ -22,25 +23,12 @@ async function main() {
     }
   });
 
-  await prisma.user.upsert({
-    where: { email: 'admin@gamastore.com' },
-    update: {},
-    create: {
-      name: 'Comandante Admin',
-      email: 'admin@gamastore.com',
+  await prisma.user.create({
+    data: {
+      name: 'Administrador Geral',
+      email: 'admin@gamaartigomilitar.com',
       password: adminPassword,
       role: 'ADMIN'
-    }
-  });
-
-  await prisma.user.upsert({
-    where: { email: 'manager@gamastore.com' },
-    update: {},
-    create: {
-      name: 'Gerente Operacional',
-      email: 'manager@gamastore.com',
-      password: managerPassword,
-      role: 'MANAGER'
     }
   });
 

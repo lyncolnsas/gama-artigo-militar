@@ -126,3 +126,69 @@ export const updateUserRole = async (req, res) => {
     return res.status(500).json({ error: 'Erro ao atualizar permissão.' });
   }
 };
+
+export const createUser = async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Nome, E-mail e Senha são obrigatórios.' });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Este e-mail já está cadastrado.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: role && ['ADMIN', 'MANAGER', 'CUSTOMER'].includes(role) ? role : 'CUSTOMER'
+      },
+      select: { id: true, name: true, email: true, role: true, createdAt: true }
+    });
+
+    return res.status(201).json(user);
+  } catch (error) {
+    console.error('Erro ao criar usuário:', error);
+    return res.status(500).json({ error: 'Erro ao criar novo usuário.' });
+  }
+};
+
+export const updateUserPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: 'A nova senha deve ter pelo menos 4 caracteres.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword }
+    });
+
+    return res.json({ message: 'Senha atualizada com sucesso!' });
+  } catch (error) {
+    console.error('Erro ao alterar senha:', error);
+    return res.status(500).json({ error: 'Erro ao alterar senha do usuário.' });
+  }
+};
+
+export const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.user && req.user.id === id) {
+      return res.status(400).json({ error: 'Você não pode excluir a sua própria conta logada.' });
+    }
+    await prisma.user.delete({ where: { id } });
+    return res.json({ message: 'Usuário removido com sucesso.' });
+  } catch (error) {
+    console.error('Erro ao remover usuário:', error);
+    return res.status(500).json({ error: 'Erro ao remover usuário.' });
+  }
+};

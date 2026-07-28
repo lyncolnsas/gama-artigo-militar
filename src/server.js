@@ -58,7 +58,10 @@ app.post('/api/auth/register', register);
 app.post('/api/auth/login', login);
 app.get('/api/auth/me', verifyToken, getMe);
 app.get('/api/auth/users', verifyToken, requireRole(['ADMIN']), getUsers);
+app.post('/api/auth/users', verifyToken, requireRole(['ADMIN']), createUser);
 app.put('/api/auth/users/:id/role', verifyToken, requireRole(['ADMIN']), updateUserRole);
+app.put('/api/auth/users/:id/password', verifyToken, requireRole(['ADMIN']), updateUserPassword);
+app.delete('/api/auth/users/:id', verifyToken, requireRole(['ADMIN']), deleteUser);
 
 // --- ROTA DE UPLOAD E GALERIA DE MÍDIAS ---
 app.post('/api/upload', upload.single('media'), handleUploadResponse);
