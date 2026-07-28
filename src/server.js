@@ -9,7 +9,7 @@ import { verifyToken, requireRole } from './middlewares/authMiddleware.js';
 
 // Controllers
 import { upload, handleUploadResponse } from './controllers/uploadController.js';
-import { register, login, getMe, getUsers, updateUserRole } from './controllers/authController.js';
+import { register, login, getMe, getUsers, updateUserRole, createUser, updateUserPassword, deleteUser } from './controllers/authController.js';
 import { 
   getProducts, 
   getProductBySlug, 
