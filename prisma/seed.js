@@ -6,12 +6,25 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Semeando banco de dados completo do Gama Store com TODOS os produtos demo...');
 
-  // 1. Limpar e Criar Usuário Administrador Principal
-  await prisma.user.deleteMany({});
-
+  // 1. Criar/Atualizar Usuário Administrador Principal com ID FIXO
+  // Usar upsert com ID fixo garante que o JWT continua válido entre deploys
   const adminPassword = await bcrypt.hash('22101844bc', 10);
 
-  // Configuração Padrão do WhatsApp Bot
+  await prisma.user.upsert({
+    where: { email: 'admin@gamaartigomilitar.com' },
+    update: {
+      name: 'Administrador Geral',
+      password: adminPassword,
+      role: 'ADMIN'
+    },
+    create: {
+      id: 'admin-gama-principal-001',
+      name: 'Administrador Geral',
+      email: 'admin@gamaartigomilitar.com',
+      password: adminPassword,
+      role: 'ADMIN'
+    }
+  });
   await prisma.botConfig.upsert({
     where: { id: 'default' },
     update: {},
