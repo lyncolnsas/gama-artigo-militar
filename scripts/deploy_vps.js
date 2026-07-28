@@ -79,10 +79,74 @@ EOF
 
     echo "=== 8. CONFIGURANDO NGINX REVERSE PROXY ==="
     if command -v nginx &> /dev/null; then
-      cat << 'EOF' > /etc/nginx/sites-available/gamaartigomilitar
+      if [ -f "/etc/letsencrypt/live/gamaartigomilitar.com/fullchain.pem" ]; then
+        cat << 'EOF' > /etc/nginx/sites-available/gamaartigomilitar
 server {
     listen 80;
-    server_name gamaartigomilitar.com www.gamaartigomilitar.com _;
+    listen [::]:80;
+    server_name gamaartigomilitar.com www.gamaartigomilitar.com;
+
+    location / {
+        root /var/www/gama-artigo-militar/frontend/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /uploads {
+        proxy_pass http://localhost:3001;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name gamaartigomilitar.com www.gamaartigomilitar.com;
+
+    ssl_certificate /etc/letsencrypt/live/gamaartigomilitar.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gamaartigomilitar.com/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        root /var/www/gama-artigo-militar/frontend/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /uploads {
+        proxy_pass http://localhost:3001;
+    }
+}
+EOF
+      else
+        cat << 'EOF' > /etc/nginx/sites-available/gamaartigomilitar
+server {
+    listen 80;
+    listen [::]:80;
+    server_name gamaartigomilitar.com www.gamaartigomilitar.com;
 
     location / {
         root /var/www/gama-artigo-militar/frontend/dist;
@@ -103,7 +167,8 @@ server {
     }
 }
 EOF
-      ln -sf /etc/nginx/sites-available/gamaartigomilitar /etc/nginx/sites-enabled/default || true
+      fi
+      rm -f /etc/nginx/sites-enabled/default
       ln -sf /etc/nginx/sites-available/gamaartigomilitar /etc/nginx/sites-enabled/gamaartigomilitar || true
       nginx -t && (systemctl restart nginx || service nginx restart) || true
     fi
