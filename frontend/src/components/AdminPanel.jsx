@@ -666,10 +666,11 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         fetchMediaLibrary(authHeader);
         if (onSectionUpdate) onSectionUpdate();
       } else {
-        showNotification('Erro ao salvar seção.', 'error');
+        const errData = await res.json().catch(() => ({}));
+        showNotification(errData.error || errData.message || 'Erro ao salvar seção.', 'error');
       }
     } catch (err) {
-      showNotification('Erro de conexão.', 'error');
+      showNotification('Erro de conexão com o servidor.', 'error');
     } finally {
       setLoading(false);
     }
@@ -689,24 +690,24 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
       const method = isEditing ? 'PUT' : 'POST';
 
       // Se houver URL digitada no campo de mídia mas mediaList estiver vazio, adiciona a URL digitada
-      let finalMediaList = productForm.mediaList;
+      let finalMediaList = productForm.mediaList || [];
       if (finalMediaList.length === 0 && productForm.mediaUrlInput) {
         finalMediaList = [{ url: productForm.mediaUrlInput, type: productForm.mediaTypeInput || 'IMAGE', isPrimary: true }];
       }
 
       const payload = {
         title: productForm.title,
-        slug: productForm.slug || productForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        description: productForm.description,
+        slug: productForm.slug || productForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+        description: productForm.description || '',
         price: parseFloat(productForm.price),
         promoPrice: productForm.promoPrice ? parseFloat(productForm.promoPrice) : null,
         stock: parseInt(productForm.stock, 10) || 0,
-        isBestseller: productForm.isBestseller,
-        isMadeToOrder: productForm.isMadeToOrder,
+        isBestseller: Boolean(productForm.isBestseller),
+        isMadeToOrder: Boolean(productForm.isMadeToOrder),
         productionDays: parseInt(productForm.productionDays, 10) || 0,
         categoryId: productForm.categoryId || null,
         media: finalMediaList,
-        variants: productForm.variants
+        variants: productForm.variants || []
       };
 
       const res = await fetch(url, {
@@ -722,10 +723,11 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
         fetchMediaLibrary(authHeader);
         if (onProductUpdate) onProductUpdate();
       } else {
-        showNotification('Erro ao salvar produto.', 'error');
+        const errData = await res.json().catch(() => ({}));
+        showNotification(errData.error || errData.details || 'Erro ao salvar produto.', 'error');
       }
     } catch (err) {
-      showNotification('Erro de comunicação.', 'error');
+      showNotification('Erro de comunicação com o servidor.', 'error');
     } finally {
       setLoading(false);
     }

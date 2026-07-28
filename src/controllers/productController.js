@@ -84,21 +84,25 @@ export const createProduct = async (req, res) => {
         productionDays: productionDays ? parseInt(productionDays, 10) : 0,
         categoryId: categoryId || null,
         media: {
-          create: (media || []).map((m, index) => ({
-            url: m.url,
-            type: inferMediaType(m.url, m.type),
-            isPrimary: m.isPrimary !== undefined ? m.isPrimary : index === 0,
-            color: m.color || null
-          }))
+          create: (media || [])
+            .filter(m => m && m.url && String(m.url).trim() !== '')
+            .map((m, index) => ({
+              url: String(m.url).trim(),
+              type: inferMediaType(m.url, m.type),
+              isPrimary: m.isPrimary !== undefined ? Boolean(m.isPrimary) : index === 0,
+              color: m.color || null
+            }))
         },
         variants: {
-          create: variantsData.map(v => ({
-            color: v.color,
-            size: v.size,
-            stock: parseInt(v.stock, 10) || 0,
-            sku: v.sku || null,
-            price: v.price ? parseFloat(v.price) : null
-          }))
+          create: variantsData
+            .filter(v => v && (v.color || v.size))
+            .map(v => ({
+              color: v.color || 'Padrão',
+              size: v.size || 'Único',
+              stock: parseInt(v.stock, 10) || 0,
+              sku: v.sku || null,
+              price: v.price ? parseFloat(v.price) : null
+            }))
         }
       },
       include: { media: true, category: true, variants: true }
@@ -150,18 +154,34 @@ export const updateProduct = async (req, res) => {
         isMadeToOrder: isMadeToOrder !== undefined ? Boolean(isMadeToOrder) : undefined,
         productionDays: productionDays !== undefined ? parseInt(productionDays, 10) || 0 : undefined,
         categoryId: categoryId !== undefined ? (categoryId || null) : undefined,
+    const validMedia = (media || []).filter(m => m && m.url && String(m.url).trim() !== '');
+    const validVariants = (variants || []).filter(v => v && (v.color || v.size));
+
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data: {
+        title,
+        slug,
+        description,
+        price: price ? parseFloat(price) : undefined,
+        promoPrice: promoPrice !== undefined ? (promoPrice ? parseFloat(promoPrice) : null) : undefined,
+        stock: updatedStock,
+        isBestseller: isBestseller !== undefined ? Boolean(isBestseller) : undefined,
+        isMadeToOrder: isMadeToOrder !== undefined ? Boolean(isMadeToOrder) : undefined,
+        productionDays: productionDays !== undefined ? parseInt(productionDays, 10) || 0 : undefined,
+        categoryId: categoryId !== undefined ? (categoryId || null) : undefined,
         media: media && Array.isArray(media) ? {
-          create: media.map((m, index) => ({
-            url: m.url,
+          create: validMedia.map((m, index) => ({
+            url: String(m.url).trim(),
             type: inferMediaType(m.url, m.type),
-            isPrimary: m.isPrimary !== undefined ? m.isPrimary : index === 0,
+            isPrimary: m.isPrimary !== undefined ? Boolean(m.isPrimary) : index === 0,
             color: m.color || null
           }))
         } : undefined,
         variants: variants && Array.isArray(variants) ? {
-          create: variants.map(v => ({
-            color: v.color,
-            size: v.size,
+          create: validVariants.map(v => ({
+            color: v.color || 'Padrão',
+            size: v.size || 'Único',
             stock: parseInt(v.stock, 10) || 0,
             sku: v.sku || null,
             price: v.price ? parseFloat(v.price) : null

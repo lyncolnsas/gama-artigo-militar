@@ -76,10 +76,11 @@ export default function VisualCmsEditor({
         setActiveKey(null); // Fecha o modal após salvar
         if (onSectionSaved) onSectionSaved();
       } else {
-        showNotification('Erro ao salvar seção.', 'error');
+        const errData = await res.json().catch(() => ({}));
+        showNotification(errData.error || errData.message || 'Erro ao salvar seção.', 'error');
       }
     } catch {
-      showNotification('Erro de conexão.', 'error');
+      showNotification('Erro de conexão com o servidor.', 'error');
     } finally {
       setSaving(false);
     }
