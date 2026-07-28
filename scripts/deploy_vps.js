@@ -76,7 +76,7 @@ ENVEOF
     fi
 
     pm2 delete gama-store-backend || true
-    pm2 start src/server.js --name gama-store-backend
+    pm2 start src/server.js --name gama-store-backend --node-args="--env-file=.env"
     pm2 save
 
     echo "=== 8. CONFIGURANDO NGINX REVERSE PROXY ==="
