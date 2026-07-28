@@ -41,7 +41,14 @@ export default function AdminPanel({ onSectionUpdate, onProductUpdate, onGoToSto
     const token = localStorage.getItem('gama_store_token');
     return token ? { 'Authorization': `Bearer ${token}` } : {};
   };
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('gama_store_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch(e) {
+      return null;
+    }
+  });
   const [searchTerm, setSearchTerm] = useState('');
 
   // Form de Login do Admin (Segurança)
