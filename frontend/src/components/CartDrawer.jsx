@@ -180,7 +180,7 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
         <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-[#0b0f17]">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-tactical-gold" />
-            <h3 className="font-tactical text-2xl font-bold tracking-wider">SOLICITAÇÃO DE MATERIAIS</h3>
+            <h3 className="font-tactical text-lg sm:text-xl md:text-2xl font-bold tracking-wider">SOLICITAÇÃO DE MATERIAIS</h3>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-gray-800 rounded text-gray-400 hover:text-white">
             <X className="w-5 h-5" />
@@ -239,7 +239,7 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
 
                       <button
                         onClick={() => onRemoveItem(itemKey)}
-                        className="p-2 text-gray-500 hover:text-red-400"
+                        className="p-2 text-gray-500 hover:text-red-400 flex-shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -267,7 +267,7 @@ export default function CartDrawer({ isOpen, onClose, cartItems, onUpdateQuantit
                     <button
                       type="submit"
                       disabled={couponLoading}
-                      className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded text-xs font-bold border border-gray-700"
+                      className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded text-xs font-bold border border-gray-700 flex-shrink-0"
                     >
                       {couponLoading ? '...' : 'APLICAR'}
                     </button>
